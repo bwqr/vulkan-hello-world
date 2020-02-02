@@ -1,0 +1,11 @@
+*
+!base
+!base/**/*
+!*.cpp
+!*.h
+!visual
+!visual/shaders
+!visual/shaders/*.frag
+!visual/shaders/*.vert
+!CMakeLists.txt
+!.gitignore
