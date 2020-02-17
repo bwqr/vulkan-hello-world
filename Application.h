@@ -4,6 +4,7 @@
 
 #include "base/vulkan/VulkanHandler.h"
 #include "base/window/glfw/GLFWWindowManager.h"
+#include "base/vulkan/VulkanModel.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -12,17 +13,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <chrono>
+
 #define WIDTH 800
 #define HEIGHT 600
-
-static std::vector<glm::vec3> vertices = {
-        {.5, .0, .0},
-        {.0, .5, .0},
-        {.5, .5, .0},
-        {.0, .5, .0},
-        {.5, .0, .0},
-        {.5, .25, .0}
-};
 
 class Application {
 public:
@@ -39,17 +33,27 @@ private:
 
     VkDevice device;
 
+    std::vector<VulkanModel> models;
+
     VulkanHandler *vulkanHandler = nullptr;
     GLFWWindowManager windowManager;
+    VkExtent2D windowExtent;
 
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
+
     VkPipeline graphicsPipeline;
 
     VkShaderModule vertShaderModule;
     VkShaderModule fragShaderModule;
 
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
+    VkBuffer modelBuffer;
+    VkDeviceMemory modelBufferMemory;
+    VkBuffer uboBuffer;
+    VkDeviceMemory uboBufferMemory;
+
+    VkDeviceSize indexOffset;
 
     std::vector<VkCommandBuffer> commandBuffers;
 
@@ -64,7 +68,7 @@ private:
 
     void createCommandBuffers();
 
-    void createVertexBuffers();
+    void loadModels();
 
     void createSyncPrimitives();
 
@@ -77,6 +81,16 @@ private:
     void resizeCleanup();
 
     void loadShaders();
+
+    void createDescriptorSetLayout();
+
+    void updateUniformBuffers(uint32_t index);
+
+    void createUboBuffers();
+
+    void createDescriptorSets();
+
+    void createDescriptorPool();
 };
 
 

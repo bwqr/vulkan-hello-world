@@ -170,3 +170,121 @@ void VulkanHandler::resizeCallback(VkExtent2D extent) {
     createRenderPass();
     createFramebuffers();
 }
+
+void VulkanHandler::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                                 VkBuffer &buffer, VkDeviceMemory &memory) {
+    VkBufferCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    createInfo.size = size;
+    createInfo.usage = usage;
+    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VK_CHECK_RESULT(vkCreateBuffer(device.logicalDevice, &createInfo, nullptr, &buffer))
+
+    VkMemoryRequirements memoryRequirements;
+    vkGetBufferMemoryRequirements(device.logicalDevice, buffer, &memoryRequirements);
+
+    VkMemoryAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = memoryRequirements.size;
+    allocateInfo.memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits, device.physicalDevice, properties);
+
+    VK_CHECK_RESULT(vkAllocateMemory(device.logicalDevice, &allocateInfo, nullptr, &memory))
+
+    vkBindBufferMemory(device.logicalDevice, buffer, memory, 0);
+}
+
+void VulkanHandler::copyBuffer(VkBuffer &srcBuffer, VkBuffer &dstBuffer, VkDeviceSize size) {
+    auto commandBuffer = beginSingleTimeCommands();
+
+    VkBufferCopy bufferCopy = {};
+    bufferCopy.srcOffset = 0;
+    bufferCopy.dstOffset = 0;
+    bufferCopy.size = size;
+
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &bufferCopy);
+
+    endSingleTimeCommands(commandBuffer);
+}
+
+VkCommandBuffer VulkanHandler::beginSingleTimeCommands() {
+    VkCommandBufferAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateInfo.commandPool = commandPool;
+    allocateInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(device.logicalDevice, &allocateInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    return commandBuffer;
+}
+
+void VulkanHandler::endSingleTimeCommands(VkCommandBuffer &commandBuffer) {
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(device.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkDeviceWaitIdle(device.logicalDevice);
+
+    vkFreeCommandBuffers(device.logicalDevice, commandPool, 1, &commandBuffer);
+}
+
+void
+VulkanHandler::createModelsBuffer(VkBuffer &modelBuffer, VkDeviceMemory &modelBufferMemory,
+                                  const std::vector<VulkanModel> &models, VkDeviceSize *indexOffset) {
+    VkDeviceSize vertexBufferSize = 0;
+    VkDeviceSize indexBufferSize = 0;
+    for (const auto &model: models) {
+        vertexBufferSize += model.vertexBufferSize;
+        indexBufferSize += model.indexBufferSize;
+    }
+
+    VkDeviceSize size = vertexBufferSize + indexBufferSize;
+    *indexOffset = vertexBufferSize;
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
+
+    createBuffer(size,
+                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 stagingBuffer, stagingMemory);
+
+    void *mem;
+
+    vkMapMemory(device.logicalDevice, stagingMemory, 0, size, 0, &mem);
+
+    for (const auto &model: models) {
+        memcpy(mem, model.vertices.data(), (size_t) model.vertexBufferSize);
+        mem = static_cast<char *>(mem) + model.vertexBufferSize;
+    }
+
+    for (const auto &model: models) {
+        memcpy(mem, model.indices.data(), (size_t) model.indexBufferSize);
+        mem = static_cast<char *>(mem) + model.indexBufferSize;
+    }
+
+    vkUnmapMemory(device.logicalDevice, stagingMemory);
+
+    createBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                 modelBuffer, modelBufferMemory);
+
+    copyBuffer(stagingBuffer, modelBuffer, size);
+
+    vkDestroyBuffer(device.logicalDevice, stagingBuffer, nullptr);
+    vkFreeMemory(device.logicalDevice, stagingMemory, nullptr);
+}
+

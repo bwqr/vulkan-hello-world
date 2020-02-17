@@ -2,6 +2,7 @@
 #define VULKAN_TRY_VULKANHANDLER_H
 
 #define GLFW_INCLUDE_VULKAN
+
 #include <GLFW/glfw3.h>
 #include <vector>
 #include <string>
@@ -11,8 +12,11 @@
 #include "VulkanDevice.h"
 #include "VulkanSwapChain.h"
 #include "VulkanDefs.h"
+#include "VulkanModel.h"
 
 using namespace vtr;
+
+typedef void (*DataAccessCallback)(void *);
 
 class VulkanHandler {
 public:
@@ -33,6 +37,15 @@ public:
     explicit VulkanHandler(WindowManager *windowManager);
 
     void resizeCallback(VkExtent2D extent);
+
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                      VkBuffer &buffer, VkDeviceMemory &memory);
+
+    void copyBuffer(VkBuffer &srcBuffer, VkBuffer &dstBuffer, VkDeviceSize size);
+
+    void
+    createModelsBuffer(VkBuffer &modelBuffer, VkDeviceMemory &modelBufferMemory, const std::vector<VulkanModel> &models,
+                       VkDeviceSize *indexOffset);
 
 private:
     WindowManager *windowManager;
@@ -64,6 +77,10 @@ private:
     void resizeCleanup();
 
     void updateFramebufferSize(VkExtent2D extent);
+
+    VkCommandBuffer beginSingleTimeCommands();
+
+    void endSingleTimeCommands(VkCommandBuffer &commandBuffer);
 };
 
 

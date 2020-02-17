@@ -1,6 +1,7 @@
 #include <zconf.h>
 #include "Application.h"
 #include "base/vulkan/VulkanShader.h"
+#include "base/vulkan/VulkanModel.h"
 
 Application::Application() : windowManager(WIDTH, HEIGHT) {
 
@@ -10,9 +11,13 @@ Application::Application() : windowManager(WIDTH, HEIGHT) {
 
     windowManager.setResizeCallback(this, (void *) Application::resizeCallback);
 
+    loadModels();
     loadShaders();
+    createUboBuffers();
+    createDescriptorPool();
+    createDescriptorSetLayout();
+    createDescriptorSets();
     createGraphicsPipeline();
-    createVertexBuffers();
     createCommandBuffers();
     createSyncPrimitives();
 }
@@ -45,23 +50,15 @@ void Application::createGraphicsPipeline() {
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {vertexStageCreateInfo, fragShaderCreateInfo};
 
-    VkVertexInputBindingDescription bindingDescription = {};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(glm::vec3);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    VkVertexInputAttributeDescription attributeDescription = {};
-    attributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescription.binding = 0;
-    attributeDescription.location = 0;
-    attributeDescription.offset = 0;
+    auto attributeDescription = Vertex::attributeDescription();
+    auto bindingDescription = Vertex::bindingDescription();
 
     VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
     vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
     vertexInputStateCreateInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputStateCreateInfo.vertexAttributeDescriptionCount = 1;
-    vertexInputStateCreateInfo.pVertexAttributeDescriptions = &attributeDescription;
+    vertexInputStateCreateInfo.vertexAttributeDescriptionCount = attributeDescription.size();
+    vertexInputStateCreateInfo.pVertexAttributeDescriptions = attributeDescription.data();
 
     VkPipelineInputAssemblyStateCreateInfo assemblyStateCreateInfo = {};
     assemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -91,7 +88,7 @@ void Application::createGraphicsPipeline() {
     rasterizationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizationStateCreateInfo.lineWidth = 1.0f;
-    rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;
@@ -124,9 +121,11 @@ void Application::createGraphicsPipeline() {
     colorBlending.blendConstants[1] = 0.0f;
     colorBlending.blendConstants[2] = 0.0f;
     colorBlending.blendConstants[3] = 0.0f;
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout))
@@ -180,44 +179,43 @@ void Application::createCommandBuffers() {
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        VkBuffer buffers[] = {vertexBuffer};
+        VkBuffer buffers[] = {modelBuffer};
         VkDeviceSize offsets[] = {0};
+        uint32_t vertexCount = 0;
+        uint32_t indexCount = 0;
+        for (const auto &model: models) {
+            vertexCount += model.vertices.size();
+            indexCount += model.indices.size();
+        }
+
         vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, buffers, offsets);
-        vkCmdDraw(commandBuffers[i], vertices.size(), 1, 0, 0);
+        vkCmdBindIndexBuffer(commandBuffers[i], modelBuffer, indexOffset, VK_INDEX_TYPE_UINT32);
+
+
+        vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+                                &models[0].descriptorSets[i], 0, nullptr);
+
+        vkCmdDrawIndexed(commandBuffers[i], indexCount, 1, 0, 0, 0);
         vkCmdEndRenderPass(commandBuffers[i]);
 
         VK_CHECK_RESULT(vkEndCommandBuffer(commandBuffers[i]))
     }
 }
 
-void Application::createVertexBuffers() {
-    VkBufferCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    createInfo.size = sizeof(glm::vec3) * vertices.size();
-    createInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+void Application::loadModels() {
+    models.emplace_back(VulkanModel({
+                                            {{.5, .0, .0}, {.0,  .0,  1.0}},
+                                            {{.0, .5, .0}, {1.0, .0,  .0}},
+                                            {{.5, .5, .0}, {.0,  1.0, .0}},
+                                    }, {0, 1, 2}, 0));
+    models.emplace_back(VulkanModel({
+                                            {{.0,  .0,  .0}, {.0,  .0,  1.0}},
+                                            {{-.5, -.5, .0}, {1.0, .0,  .0}},
+                                            {{-.5, .0,  .0}, {.0,  1.0, .0}},
+                                    }, {0, 1, 2}, models[0].indices.size()));
 
-    VK_CHECK_RESULT(vkCreateBuffer(device, &createInfo, nullptr, &vertexBuffer))
 
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = vtr::findMemoryType(memRequirements.memoryTypeBits,
-                                                    vulkanHandler->device.physicalDevice,
-                                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    VK_CHECK_RESULT(vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory))
-
-    vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
-
-    void *data;
-    vkMapMemory(device, vertexBufferMemory, 0, createInfo.size, 0, &data);
-    memcpy(data, vertices.data(), (size_t) createInfo.size);
-    vkUnmapMemory(device, vertexBufferMemory);
+    vulkanHandler->createModelsBuffer(modelBuffer, modelBufferMemory, models, &indexOffset);
 }
 
 void Application::draw() {
@@ -231,7 +229,6 @@ void Application::draw() {
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         resizeApplication();
-        std::cout << "out of date first " << currentFrame << std::endl;
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("failed to acquire swap chain image!");
@@ -242,6 +239,8 @@ void Application::draw() {
     }
 
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+    updateUniformBuffers(imageIndex);
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -261,10 +260,7 @@ void Application::draw() {
 
     vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-    if (vkQueueSubmit(vulkanHandler->device.graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to submit draw command buffer!");
-    }
+    VK_CHECK_RESULT(vkQueueSubmit(vulkanHandler->device.graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]))
 
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -282,8 +278,6 @@ void Application::draw() {
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
-
-        std::cout << "out of date second " << currentFrame << std::endl;
 
         resizeApplication();
     } else if (result != VK_SUCCESS) {
@@ -323,6 +317,11 @@ void Application::cleanup() {
 
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
+
+    vkDestroyBuffer(device, modelBuffer, nullptr);
+    vkFreeMemory(device, modelBufferMemory, nullptr);
+
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 }
 
 void Application::resizeCleanup() {
@@ -332,6 +331,10 @@ void Application::resizeCleanup() {
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
+    vkDestroyBuffer(device, uboBuffer, nullptr);
+    vkFreeMemory(device, uboBufferMemory, nullptr);
+
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 }
 
 void Application::resizeApplication() {
@@ -343,18 +346,15 @@ void Application::resizeApplication() {
         windowManager.waitEvents();
     }
 
-    vulkanHandler->resizeCallback(windowManager.getWindowExtent());
+    windowExtent = extent;
 
+    vulkanHandler->resizeCallback(extent);
+
+    createUboBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createGraphicsPipeline();
     createCommandBuffers();
-}
-
-void Application::resizeCallback(GLFWwindow *window, int width, int height) {
-    auto app = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
-
-    app->framebufferResized = true;
-
-    std::cout << "Resized" << std::endl;
 }
 
 void Application::loadShaders() {
@@ -363,4 +363,92 @@ void Application::loadShaders() {
 
     vertShaderModule = createShaderModule(device, vertShaderCode);
     fragShaderModule = createShaderModule(device, fragShaderCode);
+}
+
+void Application::updateUniformBuffers(uint32_t index) {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    void *data;
+    VkDeviceSize uboSize = sizeof(UniformBufferObject);
+    VkDeviceSize imageUboSize = uboSize * models.size();
+    VkDeviceSize offset = (imageUboSize * index);
+
+    VK_CHECK_RESULT(vkMapMemory(device, uboBufferMemory, offset, imageUboSize, 0, &data))
+
+    for (auto &model: models) {
+        model.ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        model.ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                                     glm::vec3(0.0f, 0.0f, 1.0f));
+        model.ubo.proj = glm::perspective(glm::radians(45.0f), windowExtent.width / (float) windowExtent.height,
+                                          0.1f, 10.0f);
+        model.ubo.proj[1][1] *= -1;
+
+        memcpy(data, &model.ubo, uboSize);
+        data = static_cast<char *>(data) + uboSize;
+        break;
+    }
+
+    vkUnmapMemory(device, uboBufferMemory);
+
+}
+
+void Application::createUboBuffers() {
+    auto imageCount = vulkanHandler->swapChain.imageCount;
+    VkDeviceSize size = models.size() * sizeof(UniformBufferObject) * imageCount;
+    vulkanHandler->createBuffer(size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uboBuffer,
+                                uboBufferMemory);
+}
+
+void Application::createDescriptorSets() {
+    VkDeviceSize uboSize = sizeof(UniformBufferObject);
+    for (uint32_t i = 0; i < models.size(); i++) {
+        VkDescriptorBufferInfo bufferInfo = {};
+        bufferInfo.buffer = uboBuffer;
+        bufferInfo.range = uboSize;
+        bufferInfo.offset = uboSize * i;
+
+        models[i].createDescriptorSets(device, descriptorPool, descriptorSetLayout, vulkanHandler->swapChain.imageCount,
+                                       models.size() * sizeof(UniformBufferObject), bufferInfo);
+    }
+}
+
+void Application::createDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    createInfo.bindingCount = 1;
+    createInfo.pBindings = &uboLayoutBinding;
+
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &descriptorSetLayout))
+}
+
+void Application::createDescriptorPool() {
+    VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = vulkanHandler->swapChain.imageCount * models.size();
+
+    VkDescriptorPoolCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    createInfo.poolSizeCount = 1;
+    createInfo.pPoolSizes = &poolSize;
+    createInfo.maxSets = vulkanHandler->swapChain.imageCount * models.size();
+
+    VK_CHECK_RESULT(vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPool))
+}
+
+void Application::resizeCallback(GLFWwindow *window, int width, int height) {
+    auto app = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+
+    app->framebufferResized = true;
+
+    std::cout << "Resized" << std::endl;
 }
