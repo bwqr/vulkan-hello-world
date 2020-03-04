@@ -181,21 +181,24 @@ void Application::createCommandBuffers() {
 
         VkBuffer buffers[] = {modelBuffer};
         VkDeviceSize offsets[] = {0};
-        uint32_t vertexCount = 0;
-        uint32_t indexCount = 0;
-        for (const auto &model: models) {
-            vertexCount += model.vertices.size();
-            indexCount += model.indices.size();
-        }
 
         vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, buffers, offsets);
         vkCmdBindIndexBuffer(commandBuffers[i], modelBuffer, indexOffset, VK_INDEX_TYPE_UINT32);
 
 
-        vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
-                                &models[0].descriptorSets[i], 0, nullptr);
+        uint32_t modelIndexOffset = 0;
+        uint32_t modelVertexOffset = 0;
 
-        vkCmdDrawIndexed(commandBuffers[i], indexCount, 1, 0, 0, 0);
+
+        for (const auto &model: models) {
+
+            vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
+                                    1, &model.descriptorSets[i], 0, nullptr);
+
+            vkCmdDrawIndexed(commandBuffers[i], model.indices.size(), 1, modelIndexOffset, modelVertexOffset, 0);
+            modelVertexOffset += model.vertices.size();
+            modelIndexOffset += model.indices.size();
+        }
         vkCmdEndRenderPass(commandBuffers[i]);
 
         VK_CHECK_RESULT(vkEndCommandBuffer(commandBuffers[i]))
@@ -205,14 +208,15 @@ void Application::createCommandBuffers() {
 void Application::loadModels() {
     models.emplace_back(VulkanModel({
                                             {{.5, .0, .0}, {.0,  .0,  1.0}},
+                                            {{.0, .0, .0}, {1.0, 1.0, 1.0}},
                                             {{.0, .5, .0}, {1.0, .0,  .0}},
-                                            {{.5, .5, .0}, {.0,  1.0, .0}},
-                                    }, {0, 1, 2}, 0));
+                                            {{.5, .5, .0}, {.0,  1.0, .0}}
+                                    }, {0, 1, 2, 0, 2, 3}));
     models.emplace_back(VulkanModel({
                                             {{.0,  .0,  .0}, {.0,  .0,  1.0}},
                                             {{-.5, -.5, .0}, {1.0, .0,  .0}},
                                             {{-.5, .0,  .0}, {.0,  1.0, .0}},
-                                    }, {0, 1, 2}, models[0].indices.size()));
+                                    }, {0, 1, 2}));
 
 
     vulkanHandler->createModelsBuffer(modelBuffer, modelBufferMemory, models, &indexOffset);
@@ -377,8 +381,8 @@ void Application::updateUniformBuffers(uint32_t index) {
     VkDeviceSize offset = (imageUboSize * index);
 
     VK_CHECK_RESULT(vkMapMemory(device, uboBufferMemory, offset, imageUboSize, 0, &data))
-
     for (auto &model: models) {
+
         model.ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         model.ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
                                      glm::vec3(0.0f, 0.0f, 1.0f));
@@ -388,11 +392,11 @@ void Application::updateUniformBuffers(uint32_t index) {
 
         memcpy(data, &model.ubo, uboSize);
         data = static_cast<char *>(data) + uboSize;
+
         break;
     }
 
     vkUnmapMemory(device, uboBufferMemory);
-
 }
 
 void Application::createUboBuffers() {
@@ -405,14 +409,21 @@ void Application::createUboBuffers() {
 
 void Application::createDescriptorSets() {
     VkDeviceSize uboSize = sizeof(UniformBufferObject);
-    for (uint32_t i = 0; i < models.size(); i++) {
-        VkDescriptorBufferInfo bufferInfo = {};
-        bufferInfo.buffer = uboBuffer;
-        bufferInfo.range = uboSize;
-        bufferInfo.offset = uboSize * i;
+    VkDeviceSize imageUboSize = uboSize * models.size();
+    uint32_t imageCount = vulkanHandler->swapChain.imageCount;
 
-        models[i].createDescriptorSets(device, descriptorPool, descriptorSetLayout, vulkanHandler->swapChain.imageCount,
-                                       models.size() * sizeof(UniformBufferObject), bufferInfo);
+    for (uint32_t i = 0; i < models.size(); i++) {
+        std::vector<VkDescriptorBufferInfo> bufferInfos(imageCount);
+        for(uint32_t j = 0; j < imageCount; j++) {
+            VkDescriptorBufferInfo bufferInfo = {};
+            bufferInfo.buffer = uboBuffer;
+            bufferInfo.range = uboSize;
+            bufferInfo.offset = imageUboSize * j;
+            bufferInfos[j] = bufferInfo;
+        }
+
+        models[i].createDescriptorSets(device, descriptorPool, descriptorSetLayout, imageCount,
+                                       models.size() * sizeof(UniformBufferObject), bufferInfos);
     }
 }
 

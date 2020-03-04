@@ -63,11 +63,11 @@ public:
     VkDeviceSize vertexBufferSize;
     VkDeviceSize indexBufferSize;
 
-    VulkanModel(const std::vector<Vertex> &v, const std::vector<uint32_t> &i, uint32_t indexOffset);
+    VulkanModel(const std::vector<Vertex> &v, const std::vector<uint32_t> &i);
 
     void
     createDescriptorSets(const VkDevice &device, const VkDescriptorPool &pool, const VkDescriptorSetLayout &setLayout,
-                         uint32_t imageCount, VkDeviceSize uboSize, VkDescriptorBufferInfo bufferInfo);
+                         uint32_t imageCount, VkDeviceSize uboSize, const std::vector<VkDescriptorBufferInfo> &bufferInfos);
 
 private:
 };

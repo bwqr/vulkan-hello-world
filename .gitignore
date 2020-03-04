@@ -11,6 +11,8 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 cmake-build-debug
+vulkan-hello-world
+vulkan-hello-world.cbp
 
 #IDE
 .idea

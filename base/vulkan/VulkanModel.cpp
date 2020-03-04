@@ -3,11 +3,9 @@
 #include "VulkanShader.h"
 #include "VulkanHelper.h"
 
-VulkanModel::VulkanModel(const std::vector<Vertex> &v, const std::vector<uint32_t> &i, uint32_t indexOffset) {
+VulkanModel::VulkanModel(const std::vector<Vertex> &v, const std::vector<uint32_t> &i) {
     vertices = v;
-    indices.reserve(i.size());
-
-    std::for_each(i.begin(), i.end(), [&](uint32_t index) { indices.emplace_back(index + indexOffset); });
+    indices = i;
 
     vertexBufferSize = sizeof(Vertex) * vertices.size();
     indexBufferSize = sizeof(uint32_t) * indices.size();
@@ -15,7 +13,7 @@ VulkanModel::VulkanModel(const std::vector<Vertex> &v, const std::vector<uint32_
 
 void VulkanModel::createDescriptorSets(const VkDevice &device, const VkDescriptorPool &pool,
                                        const VkDescriptorSetLayout &setLayout, uint32_t imageCount,
-                                       VkDeviceSize uboSize, VkDescriptorBufferInfo bufferInfo) {
+                                       VkDeviceSize uboSize, const std::vector<VkDescriptorBufferInfo> &bufferInfos) {
     std::vector<VkDescriptorSetLayout> layouts(imageCount, setLayout);
     VkDescriptorSetAllocateInfo allocateInfo = {};
     allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -35,13 +33,10 @@ void VulkanModel::createDescriptorSets(const VkDevice &device, const VkDescripto
         writeDescriptorSet.dstArrayElement = 0;
         writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         writeDescriptorSet.descriptorCount = 1;
-        writeDescriptorSet.pBufferInfo = &bufferInfo;
+        writeDescriptorSet.pBufferInfo = &bufferInfos[i];
 
         vkUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0,
                                nullptr);
-
-        bufferInfo.offset += uboSize;
     }
-
 }
 
