@@ -13,7 +13,7 @@ Application::Application() : windowManager(WIDTH, HEIGHT) {
 
     loadModels();
     loadShaders();
-    createUboBuffers();
+    createUboBuffer();
     createDescriptorPool();
     createDescriptorSetLayout();
     createDescriptorSets();
@@ -189,15 +189,17 @@ void Application::createCommandBuffers() {
         uint32_t modelIndexOffset = 0;
         uint32_t modelVertexOffset = 0;
 
-
+        uint32_t j = 0;
         for (const auto &model: models) {
+            uint32_t dynamicOffset = (models.size() * i + j) * static_cast<uint32_t>(dynamicAlignment);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
-                                    1, &model.descriptorSets[i], 0, nullptr);
+                                    1, &model.descriptorSets[i], 1, &dynamicOffset);
 
             vkCmdDrawIndexed(commandBuffers[i], model.indices.size(), 1, modelIndexOffset, modelVertexOffset, 0);
             modelVertexOffset += model.vertices.size();
             modelIndexOffset += model.indices.size();
+            j++;
         }
         vkCmdEndRenderPass(commandBuffers[i]);
 
@@ -354,7 +356,7 @@ void Application::resizeApplication() {
 
     vulkanHandler->resizeCallback(extent);
 
-    createUboBuffers();
+    createUboBuffer();
     createDescriptorPool();
     createDescriptorSets();
     createGraphicsPipeline();
@@ -371,66 +373,73 @@ void Application::loadShaders() {
 
 void Application::updateUniformBuffers(uint32_t index) {
     static auto startTime = std::chrono::high_resolution_clock::now();
-
+    float animationTimer = 0.0f;
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     void *data;
-    VkDeviceSize uboSize = sizeof(UniformBufferObject);
-    VkDeviceSize imageUboSize = uboSize * models.size();
-    VkDeviceSize offset = (imageUboSize * index);
 
-    VK_CHECK_RESULT(vkMapMemory(device, uboBufferMemory, offset, imageUboSize, 0, &data))
+    float k = .2;
+    uint32_t i = 0;
     for (auto &model: models) {
+        VK_CHECK_RESULT(
+                vkMapMemory(device, uboBufferMemory, dynamicAlignment * (models.size() * index + i), dynamicAlignment,
+                            0, &data))
 
-        model.ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        model.ubo.model = glm::rotate(glm::mat4(1.0f), time * k * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         model.ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
                                      glm::vec3(0.0f, 0.0f, 1.0f));
         model.ubo.proj = glm::perspective(glm::radians(45.0f), windowExtent.width / (float) windowExtent.height,
                                           0.1f, 10.0f);
         model.ubo.proj[1][1] *= -1;
 
-        memcpy(data, &model.ubo, uboSize);
-        data = static_cast<char *>(data) + uboSize;
+        memcpy(data, &model.ubo, dynamicAlignment);
 
-        break;
+        vkUnmapMemory(device, uboBufferMemory);
+        k++;
+        i++;
     }
-
-    vkUnmapMemory(device, uboBufferMemory);
 }
 
-void Application::createUboBuffers() {
-    auto imageCount = vulkanHandler->swapChain.imageCount;
-    VkDeviceSize size = models.size() * sizeof(UniformBufferObject) * imageCount;
-    vulkanHandler->createBuffer(size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uboBuffer,
-                                uboBufferMemory);
+void Application::createUboBuffer() {
+    VkDeviceSize minBufferAlignment = vulkanHandler->device.properties.limits.minUniformBufferOffsetAlignment;
+    dynamicAlignment = sizeof(VulkanModel::ubo);
+
+    if (minBufferAlignment > 0) {
+        dynamicAlignment = (dynamicAlignment + minBufferAlignment - 1) & ~(minBufferAlignment - 1);
+    }
+
+    VkDeviceSize bufferSize = models.size() * vulkanHandler->swapChain.imageCount * dynamicAlignment;
+
+    vulkanHandler->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                uboBuffer, uboBufferMemory);
 }
 
 void Application::createDescriptorSets() {
-    VkDeviceSize uboSize = sizeof(UniformBufferObject);
-    VkDeviceSize imageUboSize = uboSize * models.size();
+    VkDeviceSize imageUboSize = dynamicAlignment * models.size();
     uint32_t imageCount = vulkanHandler->swapChain.imageCount;
 
     for (uint32_t i = 0; i < models.size(); i++) {
         std::vector<VkDescriptorBufferInfo> bufferInfos(imageCount);
-        for(uint32_t j = 0; j < imageCount; j++) {
+        for (uint32_t j = 0; j < imageCount; j++) {
             VkDescriptorBufferInfo bufferInfo = {};
             bufferInfo.buffer = uboBuffer;
-            bufferInfo.range = uboSize;
-            bufferInfo.offset = imageUboSize * j;
+            bufferInfo.range = dynamicAlignment;
+            bufferInfo.offset = 0;
             bufferInfos[j] = bufferInfo;
         }
 
         models[i].createDescriptorSets(device, descriptorPool, descriptorSetLayout, imageCount,
-                                       models.size() * sizeof(UniformBufferObject), bufferInfos);
+                                       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+                                       dynamicAlignment, bufferInfos);
     }
 }
 
 void Application::createDescriptorSetLayout() {
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
     uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
@@ -444,7 +453,7 @@ void Application::createDescriptorSetLayout() {
 
 void Application::createDescriptorPool() {
     VkDescriptorPoolSize poolSize = {};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     poolSize.descriptorCount = vulkanHandler->swapChain.imageCount * models.size();
 
     VkDescriptorPoolCreateInfo createInfo = {};

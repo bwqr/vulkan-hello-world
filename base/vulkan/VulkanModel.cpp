@@ -13,6 +13,7 @@ VulkanModel::VulkanModel(const std::vector<Vertex> &v, const std::vector<uint32_
 
 void VulkanModel::createDescriptorSets(const VkDevice &device, const VkDescriptorPool &pool,
                                        const VkDescriptorSetLayout &setLayout, uint32_t imageCount,
+                                       const VkDescriptorType descriptorType,
                                        VkDeviceSize uboSize, const std::vector<VkDescriptorBufferInfo> &bufferInfos) {
     std::vector<VkDescriptorSetLayout> layouts(imageCount, setLayout);
     VkDescriptorSetAllocateInfo allocateInfo = {};
@@ -31,7 +32,7 @@ void VulkanModel::createDescriptorSets(const VkDevice &device, const VkDescripto
         writeDescriptorSet.dstSet = descriptorSets[i];
         writeDescriptorSet.dstBinding = 0;
         writeDescriptorSet.dstArrayElement = 0;
-        writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writeDescriptorSet.descriptorType = descriptorType;
         writeDescriptorSet.descriptorCount = 1;
         writeDescriptorSet.pBufferInfo = &bufferInfos[i];
 

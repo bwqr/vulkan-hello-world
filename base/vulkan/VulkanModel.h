@@ -67,7 +67,8 @@ public:
 
     void
     createDescriptorSets(const VkDevice &device, const VkDescriptorPool &pool, const VkDescriptorSetLayout &setLayout,
-                         uint32_t imageCount, VkDeviceSize uboSize, const std::vector<VkDescriptorBufferInfo> &bufferInfos);
+                         uint32_t imageCount, VkDescriptorType descriptorType, VkDeviceSize uboSize,
+                         const std::vector<VkDescriptorBufferInfo> &bufferInfos);
 
 private:
 };

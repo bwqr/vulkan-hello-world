@@ -27,6 +27,10 @@ public:
     VkDevice logicalDevice;
     QueueFamilyIndices queueFamilyIndices;
 
+    VkPhysicalDeviceProperties properties;
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    VkPhysicalDeviceFeatures features;
+
     VkQueue graphicsQueue;
     VkQueue presentQueue;
 

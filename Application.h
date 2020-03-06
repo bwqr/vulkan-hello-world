@@ -53,6 +53,7 @@ private:
     VkBuffer uboBuffer;
     VkDeviceMemory uboBufferMemory;
 
+    VkDeviceSize dynamicAlignment;
     VkDeviceSize indexOffset;
 
     std::vector<VkCommandBuffer> commandBuffers;
@@ -86,7 +87,7 @@ private:
 
     void updateUniformBuffers(uint32_t index);
 
-    void createUboBuffers();
+    void createUboBuffer();
 
     void createDescriptorSets();
 

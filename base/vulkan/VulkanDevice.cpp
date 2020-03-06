@@ -29,6 +29,10 @@ void VulkanDevice::pickPhysicalDevice() {
     if (physicalDevice == VK_NULL_HANDLE) {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
+
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
+    vkGetPhysicalDeviceFeatures(physicalDevice, &features);
 }
 
 void VulkanDevice::createLogicalDevice() {
