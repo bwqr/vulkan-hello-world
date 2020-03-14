@@ -20,6 +20,7 @@ Application::Application() : windowManager(WIDTH, HEIGHT) {
     createGraphicsPipeline();
     createCommandBuffers();
     createSyncPrimitives();
+    createOverlay();
 }
 
 Application::~Application() {
@@ -373,7 +374,7 @@ void Application::loadShaders() {
 
 void Application::updateUniformBuffers(uint32_t index) {
     static auto startTime = std::chrono::high_resolution_clock::now();
-    float animationTimer = 0.0f;
+
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
@@ -471,4 +472,28 @@ void Application::resizeCallback(GLFWwindow *window, int width, int height) {
     app->framebufferResized = true;
 
     std::cout << "Resized" << std::endl;
+}
+
+void Application::createOverlay() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForVulkan(windowManager.window, true);
+
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.Instance = vulkanHandler->instance;
+    init_info.PhysicalDevice = g_PhysicalDevice;
+    init_info.Device = g_Device;
+    init_info.QueueFamily = g_QueueFamily;
+    init_info.Queue = g_Queue;
+    init_info.PipelineCache = g_PipelineCache;
+    init_info.DescriptorPool = g_DescriptorPool;
+    init_info.Allocator = g_Allocator;
+    init_info.MinImageCount = g_MinImageCount;
+    init_info.ImageCount = wd->ImageCount;
+    init_info.CheckVkResultFn = check_vk_result;
+    ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
 }

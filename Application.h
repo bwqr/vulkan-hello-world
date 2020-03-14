@@ -13,6 +13,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "thirdparty/imgui/imgui.h"
+#include "thirdparty/imgui/examples/imgui_impl_glfw.h"
+#include "thirdparty/imgui/examples/imgui_impl_vulkan.h"
+
 #include <chrono>
 
 #define WIDTH 800
@@ -72,6 +76,8 @@ private:
     void loadModels();
 
     void createSyncPrimitives();
+
+    void createOverlay();
 
     void resizeApplication();
 
