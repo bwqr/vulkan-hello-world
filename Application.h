@@ -4,7 +4,10 @@
 
 #include "base/vulkan/VulkanHandler.h"
 #include "base/window/glfw/GLFWWindowManager.h"
-#include "base/vulkan/VulkanModel.h"
+#include "base/vulkan/VulkanBuffer.h"
+#include "VertexSet.h"
+#include "Model.h"
+#include "Camera.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -13,11 +16,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "thirdparty/imgui/imgui.h"
-#include "thirdparty/imgui/examples/imgui_impl_glfw.h"
-#include "thirdparty/imgui/examples/imgui_impl_vulkan.h"
-
 #include <chrono>
+#include <bits/unique_ptr.h>
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -37,14 +37,16 @@ private:
 
     VkDevice device;
 
-    std::vector<VulkanModel> models;
+    std::vector<std::unique_ptr<Model>> models;
+    Camera camera;
 
     VulkanHandler *vulkanHandler = nullptr;
     GLFWWindowManager windowManager;
     VkExtent2D windowExtent;
 
     VkDescriptorPool descriptorPool;
-    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorSetLayout cameraDescriptorSetLayout;
+    VkDescriptorSetLayout modelDescriptorSetLayout;
     VkPipelineLayout pipelineLayout;
 
     VkPipeline graphicsPipeline;
@@ -52,10 +54,9 @@ private:
     VkShaderModule vertShaderModule;
     VkShaderModule fragShaderModule;
 
-    VkBuffer modelBuffer;
-    VkDeviceMemory modelBufferMemory;
-    VkBuffer uboBuffer;
-    VkDeviceMemory uboBufferMemory;
+    std::vector<VertexSet> vertexSets;
+    VulkanBuffer vertexSetVbuffer;
+    VulkanBuffer uboVBuffer;
 
     VkDeviceSize dynamicAlignment;
     VkDeviceSize indexOffset;
@@ -68,6 +69,8 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     std::vector<VkFence> imagesInFlight;
+
+    VkDescriptorPool overlayDescriptorPool;
 
     void createGraphicsPipeline();
 

@@ -12,7 +12,8 @@
 #include "VulkanDevice.h"
 #include "VulkanSwapChain.h"
 #include "VulkanDefs.h"
-#include "VulkanModel.h"
+#include "VulkanBuffer.h"
+#include "../../VertexSet.h"
 
 using namespace vtr;
 
@@ -20,6 +21,8 @@ typedef void (*DataAccessCallback)(void *);
 
 class VulkanHandler {
 public:
+    VkInstance instance;
+
     VkExtent2D windowExtent;
 
     VulkanDevice device;
@@ -39,18 +42,19 @@ public:
     void resizeCallback(VkExtent2D extent);
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
-                      VkBuffer &buffer, VkDeviceMemory &memory);
+                      VulkanBuffer &vBuffer);
 
     void copyBuffer(VkBuffer &srcBuffer, VkBuffer &dstBuffer, VkDeviceSize size);
 
-    void
-    createModelsBuffer(VkBuffer &modelBuffer, VkDeviceMemory &modelBufferMemory, const std::vector<VulkanModel> &models,
-                       VkDeviceSize *indexOffset);
+    void createVertexSetsBuffer(VulkanBuffer &vBuffer, std::vector<VertexSet> &vertexSetsindexOffset,
+                                VkDeviceSize *indexOffset);
+
+    VkCommandBuffer beginSingleTimeCommands();
+
+    void endSingleTimeCommands(VkCommandBuffer &commandBuffer);
 
 private:
     WindowManager *windowManager;
-
-    VkInstance instance;
 
     VkDebugUtilsMessengerEXT debugMessenger;
 
@@ -77,10 +81,6 @@ private:
     void resizeCleanup();
 
     void updateFramebufferSize(VkExtent2D extent);
-
-    VkCommandBuffer beginSingleTimeCommands();
-
-    void endSingleTimeCommands(VkCommandBuffer &commandBuffer);
 };
 
 

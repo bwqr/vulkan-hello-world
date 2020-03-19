@@ -3,6 +3,9 @@ project(vulkan-hello-world)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++17 -lvulkan -lglfw")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++17 -lvulkan -lglfw -O2")
 
-add_executable(vulkan-hello-world main.cpp base/window/glfw/GLFWWindowManager.h Application.cpp Application.h base/vulkan/VulkanHandler.cpp base/vulkan/VulkanHandler.h base/window/glfw/GLFWWindowManager.cpp base/vulkan/VulkanHelper.h base/window/WindowManager.cpp base/window/WindowManager.h base/vulkan/VulkanDevice.cpp base/vulkan/VulkanDevice.h base/vulkan/VulkanSwapChain.cpp base/vulkan/VulkanSwapChain.h base/vulkan/VulkanShader.h base/vulkan/VulkanDefs.h base/vulkan/VulkanModel.cpp base/vulkan/VulkanModel.h)
+file(GLOB BASE_SRC "base/vulkan/*.h" "base/vulkan/*.cpp" "base/window/*.h" "base/window/*.cpp" "base/window/glfw/*.h" "base/window/glfw/*.cpp" "*.h" "*.cpp")
+#file(GLOB IMGUI_SRC "imgui/*.h" "imgui/*.cpp" "thirdparty/imgui/*.cpp" "thirdparty/imgui/*.h")
+
+add_executable(vulkan-hello-world "${BASE_SRC}" model/Car.cpp model/Car.h model/Human.cpp model/Human.h)

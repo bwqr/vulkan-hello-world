@@ -1,7 +1,8 @@
-#include <zconf.h>
 #include "Application.h"
 #include "base/vulkan/VulkanShader.h"
-#include "base/vulkan/VulkanModel.h"
+#include "Model.h"
+#include "model/Car.h"
+#include "model/Human.h"
 
 Application::Application() : windowManager(WIDTH, HEIGHT) {
 
@@ -18,9 +19,9 @@ Application::Application() : windowManager(WIDTH, HEIGHT) {
     createDescriptorSetLayout();
     createDescriptorSets();
     createGraphicsPipeline();
+//    createOverlay();
     createCommandBuffers();
     createSyncPrimitives();
-    createOverlay();
 }
 
 Application::~Application() {
@@ -31,6 +32,21 @@ Application::~Application() {
 void Application::mainLoop() {
     while (!windowManager.shouldClose()) {
         windowManager.pollEvents();
+
+        static int fps = 0;
+
+        static auto startTime = std::chrono::high_resolution_clock::now();
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+
+        if (std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count() > 1) {
+            std::cout << fps << std::endl;
+            startTime = currentTime;
+            fps = 0;
+        }
+
+        fps++;
+
         draw();
     }
 }
@@ -123,10 +139,12 @@ void Application::createGraphicsPipeline() {
     colorBlending.blendConstants[2] = 0.0f;
     colorBlending.blendConstants[3] = 0.0f;
 
+    VkDescriptorSetLayout layouts[2] = {cameraDescriptorSetLayout, modelDescriptorSetLayout};
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+    pipelineLayoutInfo.pSetLayouts = &modelDescriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout))
@@ -141,6 +159,7 @@ void Application::createGraphicsPipeline() {
     pipelineInfo.pRasterizationState = &rasterizationStateCreateInfo;
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.layout = pipelineLayout;
     pipelineInfo.renderPass = vulkanHandler->renderPass;
     pipelineInfo.subpass = 0;
@@ -180,26 +199,27 @@ void Application::createCommandBuffers() {
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        VkBuffer buffers[] = {modelBuffer};
+        VkBuffer buffers[] = {vertexSetVbuffer.buffer};
         VkDeviceSize offsets[] = {0};
 
         vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, buffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffers[i], modelBuffer, indexOffset, VK_INDEX_TYPE_UINT32);
-
-
-        uint32_t modelIndexOffset = 0;
-        uint32_t modelVertexOffset = 0;
+        vkCmdBindIndexBuffer(commandBuffers[i], vertexSetVbuffer.buffer, indexOffset, VK_INDEX_TYPE_UINT32);
 
         uint32_t j = 0;
-        for (const auto &model: models) {
-            uint32_t dynamicOffset = (models.size() * i + j) * static_cast<uint32_t>(dynamicAlignment);
+        uint32_t modelIndexOffset = 0;
+        uint32_t modelVertexOffset = 0;
+        uint32_t dynamicOffset;
+        for (auto &model: models) {
+            dynamicOffset = 2 * dynamicAlignment + (vulkanHandler->swapChain.imageCount * j + i) * static_cast<uint32_t>(dynamicAlignment);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
-                                    1, &model.descriptorSets[i], 1, &dynamicOffset);
+                                    1, &model->getDescriptorSet(i), 1, &dynamicOffset);
 
-            vkCmdDrawIndexed(commandBuffers[i], model.indices.size(), 1, modelIndexOffset, modelVertexOffset, 0);
-            modelVertexOffset += model.vertices.size();
-            modelIndexOffset += model.indices.size();
+            vkCmdDrawIndexed(commandBuffers[i], model->vertexSet->indices.size(), 1,
+                             modelIndexOffset,
+                             modelVertexOffset, 0);
+            modelVertexOffset = model->vertexSet->vertices.size();
+            modelIndexOffset = model->vertexSet->indices.size();
             j++;
         }
         vkCmdEndRenderPass(commandBuffers[i]);
@@ -209,20 +229,33 @@ void Application::createCommandBuffers() {
 }
 
 void Application::loadModels() {
-    models.emplace_back(VulkanModel({
-                                            {{.5, .0, .0}, {.0,  .0,  1.0}},
-                                            {{.0, .0, .0}, {1.0, 1.0, 1.0}},
-                                            {{.0, .5, .0}, {1.0, .0,  .0}},
-                                            {{.5, .5, .0}, {.0,  1.0, .0}}
-                                    }, {0, 1, 2, 0, 2, 3}));
-    models.emplace_back(VulkanModel({
-                                            {{.0,  .0,  .0}, {.0,  .0,  1.0}},
-                                            {{-.5, -.5, .0}, {1.0, .0,  .0}},
-                                            {{-.5, .0,  .0}, {.0,  1.0, .0}},
-                                    }, {0, 1, 2}));
+    VertexSet vs = {};
+    vs.vertices = {{{.5, .0, .0}, {.0,  .0,  1.0}},
+                   {{.0, .0, .0}, {1.0, 1.0, 1.0}},
+                   {{.0, .5, .0}, {1.0, .0,  .0}},
+                   {{.5, .5, .0}, {.0,  1.0, .0}}};
+    vs.indices = {{0, 2, 1, 0, 3, 2}};
+    vertexSets.push_back(vs);
 
+    vs.vertices = {
+            {{.0,  .0,  .0}, {.0,  .0,  1.0}},
+            {{-.5, -.5, .0}, {1.0, .0,  .0}},
+            {{-.5, .0,  .0}, {.0,  1.0, .0}},
+    };
+    vs.indices = {{0, 2, 1}};
+    vertexSets.push_back(vs);
 
-    vulkanHandler->createModelsBuffer(modelBuffer, modelBufferMemory, models, &indexOffset);
+    vulkanHandler->
+            createVertexSetsBuffer(vertexSetVbuffer, vertexSets, &indexOffset
+    );
+
+    models.emplace_back(new
+                                Car(&vertexSets[0])
+    );
+
+    models.emplace_back(new
+                                Human(&vertexSets[1])
+    );
 }
 
 void Application::draw() {
@@ -325,10 +358,10 @@ void Application::cleanup() {
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
 
-    vkDestroyBuffer(device, modelBuffer, nullptr);
-    vkFreeMemory(device, modelBufferMemory, nullptr);
+    vkDestroyBuffer(device, vertexSetVbuffer.buffer, nullptr);
+    vkFreeMemory(device, vertexSetVbuffer.memory, nullptr);
 
-    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, cameraDescriptorSetLayout, nullptr);
 }
 
 void Application::resizeCleanup() {
@@ -338,8 +371,8 @@ void Application::resizeCleanup() {
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
-    vkDestroyBuffer(device, uboBuffer, nullptr);
-    vkFreeMemory(device, uboBufferMemory, nullptr);
+    vkDestroyBuffer(device, uboVBuffer.buffer, nullptr);
+    vkFreeMemory(device, uboVBuffer.memory, nullptr);
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 }
@@ -373,67 +406,41 @@ void Application::loadShaders() {
 }
 
 void Application::updateUniformBuffers(uint32_t index) {
-    static auto startTime = std::chrono::high_resolution_clock::now();
-
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-    void *data;
-
-    float k = .2;
-    uint32_t i = 0;
+    uboVBuffer.map(0, VK_WHOLE_SIZE);
     for (auto &model: models) {
-        VK_CHECK_RESULT(
-                vkMapMemory(device, uboBufferMemory, dynamicAlignment * (models.size() * index + i), dynamicAlignment,
-                            0, &data))
-
-        model.ubo.model = glm::rotate(glm::mat4(1.0f), time * k * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        model.ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                                     glm::vec3(0.0f, 0.0f, 1.0f));
-        model.ubo.proj = glm::perspective(glm::radians(45.0f), windowExtent.width / (float) windowExtent.height,
-                                          0.1f, 10.0f);
-        model.ubo.proj[1][1] *= -1;
-
-        memcpy(data, &model.ubo, dynamicAlignment);
-
-        vkUnmapMemory(device, uboBufferMemory);
-        k++;
-        i++;
+        model->update(index);
     }
+    uboVBuffer.unmap();
 }
 
 void Application::createUboBuffer() {
     VkDeviceSize minBufferAlignment = vulkanHandler->device.properties.limits.minUniformBufferOffsetAlignment;
-    dynamicAlignment = sizeof(VulkanModel::ubo);
+    dynamicAlignment = sizeof(Model::ubo);
 
     if (minBufferAlignment > 0) {
         dynamicAlignment = (dynamicAlignment + minBufferAlignment - 1) & ~(minBufferAlignment - 1);
     }
 
-    VkDeviceSize bufferSize = models.size() * vulkanHandler->swapChain.imageCount * dynamicAlignment;
+    VkDeviceSize bufferSize = models.size() * vulkanHandler->swapChain.imageCount * dynamicAlignment +
+                              2 * dynamicAlignment; //For camera ubo
 
     vulkanHandler->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                uboBuffer, uboBufferMemory);
+                                uboVBuffer);
+
+
+    VkDeviceSize offset = dynamicAlignment * 2;
+    for (auto &model: models) {
+        offset += model->updateVBuffer(&uboVBuffer, offset, vulkanHandler->swapChain.imageCount, dynamicAlignment);
+    }
 }
 
 void Application::createDescriptorSets() {
-    VkDeviceSize imageUboSize = dynamicAlignment * models.size();
     uint32_t imageCount = vulkanHandler->swapChain.imageCount;
 
-    for (uint32_t i = 0; i < models.size(); i++) {
-        std::vector<VkDescriptorBufferInfo> bufferInfos(imageCount);
-        for (uint32_t j = 0; j < imageCount; j++) {
-            VkDescriptorBufferInfo bufferInfo = {};
-            bufferInfo.buffer = uboBuffer;
-            bufferInfo.range = dynamicAlignment;
-            bufferInfo.offset = 0;
-            bufferInfos[j] = bufferInfo;
-        }
-
-        models[i].createDescriptorSets(device, descriptorPool, descriptorSetLayout, imageCount,
-                                       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-                                       dynamicAlignment, bufferInfos);
+    for (auto &model: models) {
+        VK_CHECK_RESULT(model->createDescriptorSets(descriptorPool, modelDescriptorSetLayout, imageCount,
+                                                    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC))
     }
 }
 
@@ -449,7 +456,11 @@ void Application::createDescriptorSetLayout() {
     createInfo.bindingCount = 1;
     createInfo.pBindings = &uboLayoutBinding;
 
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &descriptorSetLayout))
+//    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &cameraDescriptorSetLayout))
+
+    uboLayoutBinding.binding = 0;
+
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &modelDescriptorSetLayout))
 }
 
 void Application::createDescriptorPool() {
@@ -472,28 +483,4 @@ void Application::resizeCallback(GLFWwindow *window, int width, int height) {
     app->framebufferResized = true;
 
     std::cout << "Resized" << std::endl;
-}
-
-void Application::createOverlay() {
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-
-    ImGuiIO& io = ImGui::GetIO();
-
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForVulkan(windowManager.window, true);
-
-    ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.Instance = vulkanHandler->instance;
-    init_info.PhysicalDevice = g_PhysicalDevice;
-    init_info.Device = g_Device;
-    init_info.QueueFamily = g_QueueFamily;
-    init_info.Queue = g_Queue;
-    init_info.PipelineCache = g_PipelineCache;
-    init_info.DescriptorPool = g_DescriptorPool;
-    init_info.Allocator = g_Allocator;
-    init_info.MinImageCount = g_MinImageCount;
-    init_info.ImageCount = wd->ImageCount;
-    init_info.CheckVkResultFn = check_vk_result;
-    ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
 }

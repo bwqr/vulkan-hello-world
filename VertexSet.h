@@ -1,23 +1,13 @@
-#ifndef VULKAN_TRY_VULKANMODEL_H
-#define VULKAN_TRY_VULKANMODEL_H
 
 
-#include <vector>
-#include <cstdint>
+#ifndef VULKAN_HELLO_WORLD_VERTEXSET_H
+#define VULKAN_HELLO_WORLD_VERTEXSET_H
+
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <array>
-
-enum VtrModelField {
-    VTR_MODEL_VERTEX,
-    VTR_MODEL_INDEX
-};
-
-struct UniformBufferObject {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
-};
+#include <vector>
+#include "VirtualBufferInfo.h"
 
 struct Vertex {
     glm::vec3 pos;
@@ -51,27 +41,19 @@ struct Vertex {
     };
 };
 
-class VulkanModel {
+class VertexSet {
 public:
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 
-    UniformBufferObject ubo;
+    VirtualBufferInfo vertexVBInfo;
+    VirtualBufferInfo indexVBInfo;
 
-    std::vector<VkDescriptorSet> descriptorSets;
-
-    VkDeviceSize vertexBufferSize;
-    VkDeviceSize indexBufferSize;
-
-    VulkanModel(const std::vector<Vertex> &v, const std::vector<uint32_t> &i);
-
-    void
-    createDescriptorSets(const VkDevice &device, const VkDescriptorPool &pool, const VkDescriptorSetLayout &setLayout,
-                         uint32_t imageCount, VkDescriptorType descriptorType, VkDeviceSize uboSize,
-                         const std::vector<VkDescriptorBufferInfo> &bufferInfos);
-
+    void updateVertexVBInfo(VkDeviceSize bufferOffset);
+    void updateIndexVBInfo(VkDeviceSize bufferOffset);
 private:
+
 };
 
 
-#endif //VULKAN_TRY_VULKANMODEL_H
+#endif //VULKAN_HELLO_WORLD_VERTEXSET_H
