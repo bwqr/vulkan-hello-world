@@ -210,12 +210,11 @@ void Application::createCommandBuffers() {
         uint32_t modelVertexOffset = 0;
         for (auto &model: models) {
 
-            uint32_t dynamicOffsets[2] = {static_cast<uint32_t>(dynamicAlignment) * 2 * i,
-                                          (vulkanHandler->swapChain.imageCount * (j + 2) + i) *
-                                          static_cast<uint32_t>(dynamicAlignment)};
+            uint32_t dynamicOffset =
+                    (vulkanHandler->swapChain.imageCount * j + i) * static_cast<uint32_t>(dynamicAlignment);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
-                                    1, &modelDescriptorSets[i], 2, dynamicOffsets);
+                                    1, &descriptorSets[i], 1, &dynamicOffset);
 
             vkCmdDrawIndexed(commandBuffers[i], model->vertexSet->indices.size(), 1,
                              modelIndexOffset,
@@ -383,7 +382,6 @@ void Application::resizeApplication() {
     resizeCleanup();
 
     VkExtent2D extent = windowManager.getWindowExtent();
-    camera.windowExtent = extent;
 
     while (extent.width == 0 || extent.height == 0) {
         extent = windowManager.getWindowExtent();
@@ -391,6 +389,8 @@ void Application::resizeApplication() {
     }
 
     windowExtent = extent;
+
+    camera.resizeCallback(extent);
 
     vulkanHandler->resizeCallback(extent);
 
@@ -436,6 +436,7 @@ void Application::createUboBuffer() {
                                 uboVBuffer);
 
     VkDeviceSize offset = camera.updateVBuffer(&uboVBuffer, 0, imageCount, dynamicAlignment * 2);
+
     for (auto &model: models) {
         offset += model->updateVBuffer(&uboVBuffer, offset, imageCount, dynamicAlignment);
     }
@@ -444,13 +445,6 @@ void Application::createUboBuffer() {
 void Application::createDescriptorSets() {
     uint32_t imageCount = vulkanHandler->swapChain.imageCount;
 
-//    camera.createDescriptorSets(descriptorPool, descriptorSetLayout, imageCount);
-//
-//    for (auto &model: models) {
-//        VK_CHECK_RESULT(model->createDescriptorSets(descriptorPool, descriptorSetLayout, imageCount,
-//                                                    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC))
-//    }
-
     std::vector<VkDescriptorSetLayout> layouts(imageCount, descriptorSetLayout);
     VkDescriptorSetAllocateInfo allocateInfo = {};
     allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -458,11 +452,10 @@ void Application::createDescriptorSets() {
     allocateInfo.descriptorSetCount = layouts.size();
     allocateInfo.pSetLayouts = layouts.data();
 
-    modelDescriptorSets.resize(layouts.size());
-    cameraDescriptorSets.resize(layouts.size());
+    descriptorSets.resize(layouts.size());
 
     VK_CHECK_RESULT(
-            vkAllocateDescriptorSets(vulkanHandler->device.logicalDevice, &allocateInfo, modelDescriptorSets.data()))
+            vkAllocateDescriptorSets(vulkanHandler->device.logicalDevice, &allocateInfo, descriptorSets.data()))
 
     VkWriteDescriptorSet writeDescriptorSets[2] = {};
 
@@ -475,23 +468,23 @@ void Application::createDescriptorSets() {
     VkDescriptorBufferInfo modelBufferInfo;
 
     modelBufferInfo.buffer = uboVBuffer.buffer;
-    modelBufferInfo.offset = 0;
+    modelBufferInfo.offset = camera.vbInfo.size;
     modelBufferInfo.range = sizeof(Model::ubo);
 
     for (uint32_t i = 0; i < layouts.size(); i++) {
 
         VkWriteDescriptorSet cameraWriteDescriptorSet = {};
         cameraWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        cameraWriteDescriptorSet.dstSet = modelDescriptorSets[i];
+        cameraWriteDescriptorSet.dstSet = descriptorSets[i];
         cameraWriteDescriptorSet.dstBinding = 0;
         cameraWriteDescriptorSet.dstArrayElement = 0;
-        cameraWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        cameraWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         cameraWriteDescriptorSet.descriptorCount = 1;
         cameraWriteDescriptorSet.pBufferInfo = &cameraBufferInfo;
 
         VkWriteDescriptorSet modelWriteDescriptorSet = {};
         modelWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        modelWriteDescriptorSet.dstSet = modelDescriptorSets[i];
+        modelWriteDescriptorSet.dstSet = descriptorSets[i];
         modelWriteDescriptorSet.dstBinding = 1;
         modelWriteDescriptorSet.dstArrayElement = 0;
         modelWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -511,7 +504,7 @@ void Application::createDescriptorSetLayout() {
 
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
     uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
@@ -534,11 +527,11 @@ void Application::createDescriptorPool() {
     VkDescriptorPoolSize poolSizes[2] = {};
     VkDescriptorPoolSize poolSize = {};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = imageCount * (models.size() + 2);
+    poolSize.descriptorCount = imageCount;
     poolSizes[0] = poolSize;
 
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    poolSize.descriptorCount = imageCount * (models.size() + 2);
+    poolSize.descriptorCount = imageCount * models.size();
     poolSizes[1] = poolSize;
 
     VkDescriptorPoolCreateInfo createInfo = {};

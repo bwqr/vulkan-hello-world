@@ -46,8 +46,7 @@ private:
 
     VkDescriptorPool descriptorPool;
     VkDescriptorSetLayout descriptorSetLayout;
-    std::vector<VkDescriptorSet> modelDescriptorSets;
-    std::vector<VkDescriptorSet> cameraDescriptorSets;
+    std::vector<VkDescriptorSet> descriptorSets;
     VkPipelineLayout pipelineLayout;
 
     VkPipeline graphicsPipeline;

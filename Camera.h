@@ -18,8 +18,6 @@
 class Camera {
 public:
 
-    VkExtent2D windowExtent;
-
     VirtualBufferInfo vbInfo;
 
     struct {
@@ -33,6 +31,17 @@ public:
 
     VkDeviceSize updateVBuffer(VulkanBuffer *uboVBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
                                VkDeviceSize dynamicAlignment);
+
+    void resizeCallback(VkExtent2D windowExtent);
+private:
+    float aspect;
+
+    glm::vec3 eye;
+    glm::vec3 center;
+    glm::vec3 up;
+    float fovy;
+
+
 };
 
 
