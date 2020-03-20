@@ -1,46 +1,25 @@
 #include "Camera.h"
 #include "base/vulkan/VulkanHelper.h"
 
-Camera::Camera() : Model(nullptr) {
-}
-
 void Camera::update(size_t index) {
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f), windowExtent.width / (float) windowExtent.height, 0.0f, 10.0f);
+    ubo.proj[1][1] *= -1;
+
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+//    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+
+    vbInfo.updateData(&ubo, sizeof(ubo) * index, sizeof(ubo));
 }
 
-VkResult Camera::createDescriptorSets(const VkDescriptorPool &pool, const VkDescriptorSetLayout &setLayout,
-                                      VkDeviceSize imageCount, VkDescriptorType descriptorType) {
-    std::vector<VkDescriptorSetLayout> layouts(imageCount, setLayout);
-    VkDescriptorSetAllocateInfo allocateInfo = {};
-    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocateInfo.descriptorPool = pool;
-    allocateInfo.descriptorSetCount = layouts.size();
-    allocateInfo.pSetLayouts = layouts.data();
-
-    descriptorSets.resize(layouts.size());
-
-    auto res = vkAllocateDescriptorSets(vbInfo.vBuffer->device, &allocateInfo, descriptorSets.data());
-
-    for (uint32_t i = 0; i < layouts.size(); i++) {
-        VkDescriptorBufferInfo bufferInfo;
-
-        size_t imageSize = vbInfo.size / imageCount;
-
-        bufferInfo.buffer = vbInfo.vBuffer->buffer;
-        bufferInfo.offset = 0;
-        bufferInfo.range = imageSize;
-
-        VkWriteDescriptorSet writeDescriptorSet = {};
-        writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeDescriptorSet.dstSet = descriptorSets[i];
-        writeDescriptorSet.dstBinding = 0;
-        writeDescriptorSet.dstArrayElement = 0;
-        writeDescriptorSet.descriptorType = descriptorType;
-        writeDescriptorSet.descriptorCount = 1;
-        writeDescriptorSet.pBufferInfo = &bufferInfo;
-
-        vkUpdateDescriptorSets(vbInfo.vBuffer->device, 1, &writeDescriptorSet, 0,
-                               nullptr);
-    }
-
-    return res;
+VkDeviceSize Camera::updateVBuffer(VulkanBuffer *uboVBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
+                                   VkDeviceSize dynamicAlignment) {
+    vbInfo.vBuffer = uboVBuffer;
+    vbInfo.offset = offset;
+    vbInfo.size = dynamicAlignment * imageCount;
+    return vbInfo.size;
 }

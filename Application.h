@@ -17,7 +17,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <chrono>
-#include <bits/unique_ptr.h>
+#include <memory>
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -45,8 +45,9 @@ private:
     VkExtent2D windowExtent;
 
     VkDescriptorPool descriptorPool;
-    VkDescriptorSetLayout cameraDescriptorSetLayout;
-    VkDescriptorSetLayout modelDescriptorSetLayout;
+    VkDescriptorSetLayout descriptorSetLayout;
+    std::vector<VkDescriptorSet> modelDescriptorSets;
+    std::vector<VkDescriptorSet> cameraDescriptorSets;
     VkPipelineLayout pipelineLayout;
 
     VkPipeline graphicsPipeline;

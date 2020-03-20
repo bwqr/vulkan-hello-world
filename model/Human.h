@@ -11,9 +11,6 @@ public:
     Human(VertexSet *vs);
 
     void update(size_t index) override;
-
-    VkResult createDescriptorSets(const VkDescriptorPool &pool, const VkDescriptorSetLayout &setLayout,
-                                  VkDeviceSize imageCount, VkDescriptorType descriptorType) override;
 };
 
 

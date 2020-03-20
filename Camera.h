@@ -6,24 +6,33 @@
 #include <vector>
 #include "base/vulkan/VulkanBuffer.h"
 #include "VirtualBufferInfo.h"
-#include "Model.h"
 
-class Camera : Model {
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
+
+class Camera {
 public:
+
+    VkExtent2D windowExtent;
+
+    VirtualBufferInfo vbInfo;
 
     struct {
         glm::mat4 view;
         glm::mat4 proj;
     } ubo;
 
-    std::vector<VkDescriptorSet> descriptorSets;
+    Camera() = default;
 
-    Camera();
+    void update(size_t index);
 
-    VkResult createDescriptorSets(const VkDescriptorPool &pool, const VkDescriptorSetLayout &setLayout,
-                                  VkDeviceSize imageCount, VkDescriptorType descriptorType) override;
-
-    void update(size_t index) override;
+    VkDeviceSize updateVBuffer(VulkanBuffer *uboVBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
+                               VkDeviceSize dynamicAlignment);
 };
 
 

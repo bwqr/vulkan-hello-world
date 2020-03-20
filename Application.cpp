@@ -139,12 +139,11 @@ void Application::createGraphicsPipeline() {
     colorBlending.blendConstants[2] = 0.0f;
     colorBlending.blendConstants[3] = 0.0f;
 
-    VkDescriptorSetLayout layouts[2] = {cameraDescriptorSetLayout, modelDescriptorSetLayout};
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &modelDescriptorSetLayout;
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout))
@@ -205,15 +204,18 @@ void Application::createCommandBuffers() {
         vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, buffers, offsets);
         vkCmdBindIndexBuffer(commandBuffers[i], vertexSetVbuffer.buffer, indexOffset, VK_INDEX_TYPE_UINT32);
 
+
         uint32_t j = 0;
         uint32_t modelIndexOffset = 0;
         uint32_t modelVertexOffset = 0;
-        uint32_t dynamicOffset;
         for (auto &model: models) {
-            dynamicOffset = 2 * dynamicAlignment + (vulkanHandler->swapChain.imageCount * j + i) * static_cast<uint32_t>(dynamicAlignment);
+
+            uint32_t dynamicOffsets[2] = {static_cast<uint32_t>(dynamicAlignment) * 2 * i,
+                                          (vulkanHandler->swapChain.imageCount * (j + 2) + i) *
+                                          static_cast<uint32_t>(dynamicAlignment)};
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
-                                    1, &model->getDescriptorSet(i), 1, &dynamicOffset);
+                                    1, &modelDescriptorSets[i], 2, dynamicOffsets);
 
             vkCmdDrawIndexed(commandBuffers[i], model->vertexSet->indices.size(), 1,
                              modelIndexOffset,
@@ -234,7 +236,7 @@ void Application::loadModels() {
                    {{.0, .0, .0}, {1.0, 1.0, 1.0}},
                    {{.0, .5, .0}, {1.0, .0,  .0}},
                    {{.5, .5, .0}, {.0,  1.0, .0}}};
-    vs.indices = {{0, 2, 1, 0, 3, 2}};
+    vs.indices = {{0, 1, 2, 0, 2, 3}};
     vertexSets.push_back(vs);
 
     vs.vertices = {
@@ -242,7 +244,7 @@ void Application::loadModels() {
             {{-.5, -.5, .0}, {1.0, .0,  .0}},
             {{-.5, .0,  .0}, {.0,  1.0, .0}},
     };
-    vs.indices = {{0, 2, 1}};
+    vs.indices = {{0, 1, 2}};
     vertexSets.push_back(vs);
 
     vulkanHandler->
@@ -361,7 +363,7 @@ void Application::cleanup() {
     vkDestroyBuffer(device, vertexSetVbuffer.buffer, nullptr);
     vkFreeMemory(device, vertexSetVbuffer.memory, nullptr);
 
-    vkDestroyDescriptorSetLayout(device, cameraDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 }
 
 void Application::resizeCleanup() {
@@ -381,6 +383,8 @@ void Application::resizeApplication() {
     resizeCleanup();
 
     VkExtent2D extent = windowManager.getWindowExtent();
+    camera.windowExtent = extent;
+
     while (extent.width == 0 || extent.height == 0) {
         extent = windowManager.getWindowExtent();
         windowManager.waitEvents();
@@ -407,6 +411,7 @@ void Application::loadShaders() {
 
 void Application::updateUniformBuffers(uint32_t index) {
     uboVBuffer.map(0, VK_WHOLE_SIZE);
+    camera.update(index);
     for (auto &model: models) {
         model->update(index);
     }
@@ -421,58 +426,126 @@ void Application::createUboBuffer() {
         dynamicAlignment = (dynamicAlignment + minBufferAlignment - 1) & ~(minBufferAlignment - 1);
     }
 
-    VkDeviceSize bufferSize = models.size() * vulkanHandler->swapChain.imageCount * dynamicAlignment +
-                              2 * dynamicAlignment; //For camera ubo
+    size_t imageCount = vulkanHandler->swapChain.imageCount;
+
+    VkDeviceSize bufferSize =
+            imageCount * dynamicAlignment * (models.size() + 2); //For camera ubo
 
     vulkanHandler->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                 uboVBuffer);
 
-
-    VkDeviceSize offset = dynamicAlignment * 2;
+    VkDeviceSize offset = camera.updateVBuffer(&uboVBuffer, 0, imageCount, dynamicAlignment * 2);
     for (auto &model: models) {
-        offset += model->updateVBuffer(&uboVBuffer, offset, vulkanHandler->swapChain.imageCount, dynamicAlignment);
+        offset += model->updateVBuffer(&uboVBuffer, offset, imageCount, dynamicAlignment);
     }
 }
 
 void Application::createDescriptorSets() {
     uint32_t imageCount = vulkanHandler->swapChain.imageCount;
 
-    for (auto &model: models) {
-        VK_CHECK_RESULT(model->createDescriptorSets(descriptorPool, modelDescriptorSetLayout, imageCount,
-                                                    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC))
+//    camera.createDescriptorSets(descriptorPool, descriptorSetLayout, imageCount);
+//
+//    for (auto &model: models) {
+//        VK_CHECK_RESULT(model->createDescriptorSets(descriptorPool, descriptorSetLayout, imageCount,
+//                                                    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC))
+//    }
+
+    std::vector<VkDescriptorSetLayout> layouts(imageCount, descriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = descriptorPool;
+    allocateInfo.descriptorSetCount = layouts.size();
+    allocateInfo.pSetLayouts = layouts.data();
+
+    modelDescriptorSets.resize(layouts.size());
+    cameraDescriptorSets.resize(layouts.size());
+
+    VK_CHECK_RESULT(
+            vkAllocateDescriptorSets(vulkanHandler->device.logicalDevice, &allocateInfo, modelDescriptorSets.data()))
+
+    VkWriteDescriptorSet writeDescriptorSets[2] = {};
+
+    VkDescriptorBufferInfo cameraBufferInfo;
+
+    cameraBufferInfo.buffer = uboVBuffer.buffer;
+    cameraBufferInfo.offset = 0;
+    cameraBufferInfo.range = sizeof(Camera::ubo);
+
+    VkDescriptorBufferInfo modelBufferInfo;
+
+    modelBufferInfo.buffer = uboVBuffer.buffer;
+    modelBufferInfo.offset = 0;
+    modelBufferInfo.range = sizeof(Model::ubo);
+
+    for (uint32_t i = 0; i < layouts.size(); i++) {
+
+        VkWriteDescriptorSet cameraWriteDescriptorSet = {};
+        cameraWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        cameraWriteDescriptorSet.dstSet = modelDescriptorSets[i];
+        cameraWriteDescriptorSet.dstBinding = 0;
+        cameraWriteDescriptorSet.dstArrayElement = 0;
+        cameraWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        cameraWriteDescriptorSet.descriptorCount = 1;
+        cameraWriteDescriptorSet.pBufferInfo = &cameraBufferInfo;
+
+        VkWriteDescriptorSet modelWriteDescriptorSet = {};
+        modelWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        modelWriteDescriptorSet.dstSet = modelDescriptorSets[i];
+        modelWriteDescriptorSet.dstBinding = 1;
+        modelWriteDescriptorSet.dstArrayElement = 0;
+        modelWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        modelWriteDescriptorSet.descriptorCount = 1;
+        modelWriteDescriptorSet.pBufferInfo = &modelBufferInfo;
+
+        writeDescriptorSets[0] = cameraWriteDescriptorSet;
+        writeDescriptorSets[1] = modelWriteDescriptorSet;
+
+        vkUpdateDescriptorSets(vulkanHandler->device.logicalDevice, 2, writeDescriptorSets, 0,
+                               nullptr);
     }
 }
 
 void Application::createDescriptorSetLayout() {
+    std::vector<VkDescriptorSetLayoutBinding> uboLayoutBindings;
+
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
     uboLayoutBinding.binding = 0;
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
+    uboLayoutBindings.push_back(uboLayoutBinding);
+
+    uboLayoutBinding.binding = 1;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    uboLayoutBindings.push_back(uboLayoutBinding);
+
     VkDescriptorSetLayoutCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    createInfo.bindingCount = 1;
-    createInfo.pBindings = &uboLayoutBinding;
+    createInfo.bindingCount = uboLayoutBindings.size();
+    createInfo.pBindings = uboLayoutBindings.data();
 
-//    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &cameraDescriptorSetLayout))
-
-    uboLayoutBinding.binding = 0;
-
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &modelDescriptorSetLayout))
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &descriptorSetLayout))
 }
 
 void Application::createDescriptorPool() {
+    size_t imageCount = vulkanHandler->swapChain.imageCount;
+    VkDescriptorPoolSize poolSizes[2] = {};
     VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = imageCount * (models.size() + 2);
+    poolSizes[0] = poolSize;
+
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    poolSize.descriptorCount = vulkanHandler->swapChain.imageCount * models.size();
+    poolSize.descriptorCount = imageCount * (models.size() + 2);
+    poolSizes[1] = poolSize;
 
     VkDescriptorPoolCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    createInfo.poolSizeCount = 1;
-    createInfo.pPoolSizes = &poolSize;
-    createInfo.maxSets = vulkanHandler->swapChain.imageCount * models.size();
+    createInfo.poolSizeCount = 2;
+    createInfo.pPoolSizes = poolSizes;
+    createInfo.maxSets = imageCount * (models.size() + 2);
 
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPool))
 }

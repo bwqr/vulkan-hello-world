@@ -10,10 +10,6 @@ class Car : public Model {
 public:
     Car(VertexSet *vs);
 
-    VkResult
-    createDescriptorSets(const VkDescriptorPool &pool, const VkDescriptorSetLayout &setLayout, VkDeviceSize imageCount,
-                         VkDescriptorType descriptorType) override;
-
     void update(size_t index) override;
 };
 
