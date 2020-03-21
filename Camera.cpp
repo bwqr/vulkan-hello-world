@@ -6,15 +6,22 @@ void Camera::update(size_t index) {
     ubo.proj = glm::perspective(glm::radians(45.0f), aspect, 0.0f, 10.0f);
     ubo.proj[1][1] *= -1;
 
-    vbInfo.updateData(&ubo, sizeof(ubo) * index, sizeof(ubo));
+    vbInfos[index].updateData(&ubo, sizeof(ubo));
 }
 
-VkDeviceSize Camera::updateVBuffer(VulkanBuffer *uboVBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
-                                   VkDeviceSize dynamicAlignment) {
+void Camera::updateVBuffer(VulkanBuffer *uboVBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
+                           VkDeviceSize dynamicAlignment) {
+    VirtualBufferInfo vbInfo = {};
     vbInfo.vBuffer = uboVBuffer;
     vbInfo.offset = offset;
-    vbInfo.size = dynamicAlignment * imageCount;
-    return vbInfo.size;
+    vbInfo.size = dynamicAlignment * 2;
+
+    vbInfos.reserve(imageCount);
+
+    for (size_t i = 0; i < imageCount; i++) {
+        vbInfos.push_back(vbInfo);
+        vbInfo.offset += vbInfo.size;
+    }
 }
 
 void Camera::resizeCallback(VkExtent2D windowExtent) {

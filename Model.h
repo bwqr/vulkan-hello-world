@@ -20,13 +20,13 @@ public:
         glm::mat4 model;
     } ubo;
 
-    VirtualBufferInfo vbInfo;
+    std::vector<VirtualBufferInfo> vbInfos;
 
     Model(VertexSet *vs);
 
     virtual void update(size_t index) = 0;
 
-    VkDeviceSize updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
+    void updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize baseOffset, VkDeviceSize imageOffset, VkDeviceSize imageCount,
                                VkDeviceSize dynamicAlignment);
 };
 

@@ -18,7 +18,7 @@
 class Camera {
 public:
 
-    VirtualBufferInfo vbInfo;
+    std::vector<VirtualBufferInfo> vbInfos;
 
     struct {
         glm::mat4 view;
@@ -29,7 +29,7 @@ public:
 
     void update(size_t index);
 
-    VkDeviceSize updateVBuffer(VulkanBuffer *uboVBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
+    void updateVBuffer(VulkanBuffer *uboVBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
                                VkDeviceSize dynamicAlignment);
 
     void resizeCallback(VkExtent2D windowExtent);

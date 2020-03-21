@@ -210,8 +210,7 @@ void Application::createCommandBuffers() {
         uint32_t modelVertexOffset = 0;
         for (auto &model: models) {
 
-            uint32_t dynamicOffset =
-                    (vulkanHandler->swapChain.imageCount * j + i) * static_cast<uint32_t>(dynamicAlignment);
+            uint32_t dynamicOffset = j * static_cast<uint32_t>(dynamicAlignment);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
                                     1, &descriptorSets[i], 1, &dynamicOffset);
@@ -435,10 +434,13 @@ void Application::createUboBuffer() {
                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                 uboVBuffer);
 
-    VkDeviceSize offset = camera.updateVBuffer(&uboVBuffer, 0, imageCount, dynamicAlignment * 2);
+    camera.updateVBuffer(&uboVBuffer, 0, imageCount, dynamicAlignment);
+    VkDeviceSize offset = camera.vbInfos[0].size * imageCount;
 
-    for (auto &model: models) {
-        offset += model->updateVBuffer(&uboVBuffer, offset, imageCount, dynamicAlignment);
+    for (size_t i = 0; i < models.size(); i++) {
+        //Base offset is the offset from camera buffer. And image offset is whole models buffer for one image.
+        models[i]->updateVBuffer(&uboVBuffer, offset + i * dynamicAlignment, models.size() * dynamicAlignment,
+                                 imageCount, dynamicAlignment);
     }
 }
 
@@ -460,18 +462,18 @@ void Application::createDescriptorSets() {
     VkWriteDescriptorSet writeDescriptorSets[2] = {};
 
     VkDescriptorBufferInfo cameraBufferInfo;
-
     cameraBufferInfo.buffer = uboVBuffer.buffer;
-    cameraBufferInfo.offset = 0;
     cameraBufferInfo.range = sizeof(Camera::ubo);
 
     VkDescriptorBufferInfo modelBufferInfo;
-
     modelBufferInfo.buffer = uboVBuffer.buffer;
-    modelBufferInfo.offset = camera.vbInfo.size;
     modelBufferInfo.range = sizeof(Model::ubo);
 
     for (uint32_t i = 0; i < layouts.size(); i++) {
+
+        cameraBufferInfo.offset = i * sizeof(Camera::ubo);
+
+        modelBufferInfo.offset = dynamicAlignment * (2 * imageCount + models.size() * i);
 
         VkWriteDescriptorSet cameraWriteDescriptorSet = {};
         cameraWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

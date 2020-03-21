@@ -4,10 +4,17 @@ Model::Model(VertexSet *vs) {
     vertexSet = vs;
 }
 
-VkDeviceSize Model::updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize offset, VkDeviceSize imageCount,
-                          VkDeviceSize dynamicAlignment) {
+void Model::updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize baseOffset, VkDeviceSize imageOffset,
+                          VkDeviceSize imageCount, VkDeviceSize dynamicAlignment) {
+    VirtualBufferInfo vbInfo = {};
     vbInfo.vBuffer = vBuffer;
-    vbInfo.offset = offset;
-    vbInfo.size = dynamicAlignment * imageCount;
-    return vbInfo.size;
+    vbInfo.offset = baseOffset;
+    vbInfo.size = dynamicAlignment;
+
+    vbInfos.reserve(imageCount);
+
+    for (size_t i = 0; i < imageCount; i++) {
+        vbInfos.push_back(vbInfo);
+        vbInfo.offset += imageOffset;
+    }
 }

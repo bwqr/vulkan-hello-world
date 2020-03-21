@@ -10,7 +10,7 @@ class VirtualBufferInfo {
 public:
     VirtualBufferInfo() = default;
 
-    void updateData(void *data, VkDeviceSize _offset, VkDeviceSize _size);
+    void updateData(void *data, VkDeviceSize _size);
 
     VulkanBuffer *vBuffer;
     VkDeviceSize offset;
