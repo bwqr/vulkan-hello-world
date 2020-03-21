@@ -49,6 +49,9 @@ public:
     VirtualBufferInfo vertexVBInfo;
     VirtualBufferInfo indexVBInfo;
 
+    uint32_t vertexOffset;
+    uint32_t indexOffset;
+
     void updateVertexVBInfo(VkDeviceSize bufferOffset);
     void updateIndexVBInfo(VkDeviceSize bufferOffset);
 private:

@@ -11,7 +11,7 @@ void Human::update(size_t index) {
 
     static float k = .2;
 
-    ubo.model = glm::rotate(glm::mat4(1.0f), k * time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = glm::rotate(glm::mat4(2.0f), k * time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f));
 
     vbInfos[index].updateData(&ubo.model, sizeof(ubo));
 }

@@ -216,10 +216,10 @@ void Application::createCommandBuffers() {
                                     1, &descriptorSets[i], 1, &dynamicOffset);
 
             vkCmdDrawIndexed(commandBuffers[i], model->vertexSet->indices.size(), 1,
-                             modelIndexOffset,
-                             modelVertexOffset, 0);
-            modelVertexOffset = model->vertexSet->vertices.size();
-            modelIndexOffset = model->vertexSet->indices.size();
+                             model->vertexSet->indexOffset,
+                             model->vertexSet->vertexOffset, 0);
+            modelVertexOffset += model->vertexSet->vertices.size();
+            modelIndexOffset += model->vertexSet->indices.size();
             j++;
         }
         vkCmdEndRenderPass(commandBuffers[i]);
@@ -249,13 +249,22 @@ void Application::loadModels() {
             createVertexSetsBuffer(vertexSetVbuffer, vertexSets, &indexOffset
     );
 
-    models.emplace_back(new
-                                Car(&vertexSets[0])
-    );
+    uint32_t iOffset = 0;
+    uint32_t vOffset = 0;
+    for (auto &vs: vertexSets) {
+        vs.indexOffset = iOffset;
+        vs.vertexOffset = vOffset;
+        iOffset += vs.indices.size();
+        vOffset += vs.vertices.size();
+    }
 
+    models.emplace_back(new
+                                Car(&vertexSets[1])
+    );
     models.emplace_back(new
                                 Human(&vertexSets[1])
     );
+
 }
 
 void Application::draw() {
