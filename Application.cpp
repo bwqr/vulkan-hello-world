@@ -1,8 +1,4 @@
 #include "Application.h"
-#include "base/vulkan/VulkanShader.h"
-#include "Model.h"
-#include "model/Car.h"
-#include "model/Human.h"
 
 Application::Application() : windowManager(WIDTH, HEIGHT) {
 
@@ -19,7 +15,6 @@ Application::Application() : windowManager(WIDTH, HEIGHT) {
     createDescriptorSetLayout();
     createDescriptorSets();
     createGraphicsPipeline();
-//    createOverlay();
     createCommandBuffers();
     createSyncPrimitives();
 }
@@ -198,16 +193,13 @@ void Application::createCommandBuffers() {
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        VkBuffer buffers[] = {vertexSetVbuffer.buffer};
+        VkBuffer buffers[] = {vertexSetVBuffer.buffer};
         VkDeviceSize offsets[] = {0};
 
         vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, buffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffers[i], vertexSetVbuffer.buffer, indexOffset, VK_INDEX_TYPE_UINT32);
-
+        vkCmdBindIndexBuffer(commandBuffers[i], vertexSetVBuffer.buffer, indexOffset, VK_INDEX_TYPE_UINT32);
 
         uint32_t j = 0;
-        uint32_t modelIndexOffset = 0;
-        uint32_t modelVertexOffset = 0;
         for (auto &model: models) {
 
             uint32_t dynamicOffset = j * static_cast<uint32_t>(dynamicAlignment);
@@ -218,8 +210,7 @@ void Application::createCommandBuffers() {
             vkCmdDrawIndexed(commandBuffers[i], model->vertexSet->indices.size(), 1,
                              model->vertexSet->indexOffset,
                              model->vertexSet->vertexOffset, 0);
-            modelVertexOffset += model->vertexSet->vertices.size();
-            modelIndexOffset += model->vertexSet->indices.size();
+
             j++;
         }
         vkCmdEndRenderPass(commandBuffers[i]);
@@ -229,37 +220,50 @@ void Application::createCommandBuffers() {
 }
 
 void Application::loadModels() {
-    VertexSet vs = {};
-    vs.vertices = {{{.5, .0, .0}, {.0,  .0,  1.0}},
-                   {{.0, .0, .0}, {1.0, 1.0, 1.0}},
-                   {{.0, .5, .0}, {1.0, .0,  .0}},
-                   {{.5, .5, .0}, {.0,  1.0, .0}}};
-    vs.indices = {{0, 1, 2, 0, 2, 3}};
-    vertexSets.push_back(vs);
-
-    vs.vertices = {
-            {{.0,  .0,  .0}, {.0,  .0,  1.0}},
-            {{-.5, -.5, .0}, {1.0, .0,  .0}},
-            {{-.5, .0,  .0}, {.0,  1.0, .0}},
+    VertexSet vertexSet = {};
+    vertexSet.vertices = {{{.5, .0, .0}, {.0,  .0,  1.0}, {1.0f, 0.0f}},
+                          {{.0, .0, .0}, {1.0, 1.0, 1.0}, {0.0f, 0.0f}},
+                          {{.0, .5, .0}, {1.0, .0,  .0},  {0.0f, 1.0f}},
+                          {{.5, .5, .0}, {.0,  1.0, .0},  {1.0f, 1.0f}}
     };
-    vs.indices = {{0, 1, 2}};
-    vertexSets.push_back(vs);
+    vertexSet.indices = {{0, 1, 2, 0, 2, 3}};
+    vertexSets.push_back(vertexSet);
 
-    vulkanHandler->
-            createVertexSetsBuffer(vertexSetVbuffer, vertexSets, &indexOffset
-    );
+    vertexSet.vertices = {
+            {{.0,  .0,  .0}, {.0,  .0,  1.0}, {1.0f, 0.0f}},
+            {{-.5, -.5, .0}, {1.0, .0,  .0},  {0.0f, -0.5f}},
+            {{-.5, .0,  .0}, {.0,  1.0, .0},  {0.0f, 1.0f}},
+    };
+    vertexSet.indices = {{0, 1, 2}};
+    vertexSets.push_back(vertexSet);
 
-    uint32_t iOffset = 0;
-    uint32_t vOffset = 0;
-    for (auto &vs: vertexSets) {
-        vs.indexOffset = iOffset;
-        vs.vertexOffset = vOffset;
-        iOffset += vs.indices.size();
-        vOffset += vs.vertices.size();
+    vulkanHandler->createVertexSetsBuffer(vertexSetVBuffer, vertexSets, &indexOffset);
+
+    {
+        uint32_t iOffset = 0;
+        uint32_t vOffset = 0;
+        for (auto &vs: vertexSets) {
+            vs.indexOffset = iOffset;
+            vs.vertexOffset = vOffset;
+            iOffset += vs.indices.size();
+            vOffset += vs.vertices.size();
+        }
     }
 
+    int texWidth, texHeight, texChannels;
+    auto *pixels = TextureHandler::loadTexture("visual/texture/texture.jpg", &texWidth, &texHeight, &texChannels);
+    VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image!");
+    }
+
+    vulkanHandler->createTexture(imageSize, pixels, texWidth, texHeight, &vTexture);
+
+    TextureHandler::unloadTexture(pixels);
+
     models.emplace_back(new
-                                Car(&vertexSets[1])
+                                Car(&vertexSets[0])
     );
     models.emplace_back(new
                                 Human(&vertexSets[1])
@@ -367,8 +371,13 @@ void Application::cleanup() {
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
 
-    vkDestroyBuffer(device, vertexSetVbuffer.buffer, nullptr);
-    vkFreeMemory(device, vertexSetVbuffer.memory, nullptr);
+    vkDestroyBuffer(device, vertexSetVBuffer.buffer, nullptr);
+    vkFreeMemory(device, vertexSetVBuffer.memory, nullptr);
+
+    vkDestroyImage(device, vTexture.image, nullptr);
+    vkFreeMemory(device, vTexture.memory, nullptr);
+    vkDestroyImageView(device, vTexture.imageView, nullptr);
+    vkDestroySampler(device, vTexture.sampler, nullptr);
 
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 }
@@ -468,15 +477,20 @@ void Application::createDescriptorSets() {
     VK_CHECK_RESULT(
             vkAllocateDescriptorSets(vulkanHandler->device.logicalDevice, &allocateInfo, descriptorSets.data()))
 
-    VkWriteDescriptorSet writeDescriptorSets[2] = {};
+    VkWriteDescriptorSet writeDescriptorSets[3] = {};
 
-    VkDescriptorBufferInfo cameraBufferInfo;
+    VkDescriptorBufferInfo cameraBufferInfo = {};
     cameraBufferInfo.buffer = uboVBuffer.buffer;
     cameraBufferInfo.range = sizeof(Camera::ubo);
 
-    VkDescriptorBufferInfo modelBufferInfo;
+    VkDescriptorBufferInfo modelBufferInfo = {};
     modelBufferInfo.buffer = uboVBuffer.buffer;
     modelBufferInfo.range = sizeof(Model::ubo);
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.sampler = vTexture.sampler;
+    imageInfo.imageView = vTexture.imageView;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     for (uint32_t i = 0; i < layouts.size(); i++) {
 
@@ -502,16 +516,26 @@ void Application::createDescriptorSets() {
         modelWriteDescriptorSet.descriptorCount = 1;
         modelWriteDescriptorSet.pBufferInfo = &modelBufferInfo;
 
+        VkWriteDescriptorSet imageWriteDescriptorSet = {};
+        imageWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        imageWriteDescriptorSet.dstSet = descriptorSets[i];
+        imageWriteDescriptorSet.dstBinding = 2;
+        imageWriteDescriptorSet.dstArrayElement = 0;
+        imageWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        imageWriteDescriptorSet.descriptorCount = 1;
+        imageWriteDescriptorSet.pImageInfo = &imageInfo;
+
         writeDescriptorSets[0] = cameraWriteDescriptorSet;
         writeDescriptorSets[1] = modelWriteDescriptorSet;
+        writeDescriptorSets[2] = imageWriteDescriptorSet;
 
-        vkUpdateDescriptorSets(vulkanHandler->device.logicalDevice, 2, writeDescriptorSets, 0,
+        vkUpdateDescriptorSets(vulkanHandler->device.logicalDevice, 3, writeDescriptorSets, 0,
                                nullptr);
     }
 }
 
 void Application::createDescriptorSetLayout() {
-    std::vector<VkDescriptorSetLayoutBinding> uboLayoutBindings;
+    std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
 
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
     uboLayoutBinding.binding = 0;
@@ -519,36 +543,48 @@ void Application::createDescriptorSetLayout() {
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-    uboLayoutBindings.push_back(uboLayoutBinding);
+    layoutBindings.push_back(uboLayoutBinding);
 
     uboLayoutBinding.binding = 1;
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    uboLayoutBindings.push_back(uboLayoutBinding);
+    layoutBindings.push_back(uboLayoutBinding);
+
+    VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
+    samplerLayoutBinding.binding = 2;
+    samplerLayoutBinding.descriptorCount = 1;
+    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    samplerLayoutBinding.pImmutableSamplers = nullptr;
+    layoutBindings.push_back(samplerLayoutBinding);
 
     VkDescriptorSetLayoutCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    createInfo.bindingCount = uboLayoutBindings.size();
-    createInfo.pBindings = uboLayoutBindings.data();
+    createInfo.bindingCount = layoutBindings.size();
+    createInfo.pBindings = layoutBindings.data();
 
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &descriptorSetLayout))
 }
 
 void Application::createDescriptorPool() {
     size_t imageCount = vulkanHandler->swapChain.imageCount;
-    VkDescriptorPoolSize poolSizes[2] = {};
+    std::vector<VkDescriptorPoolSize> poolSizes;
     VkDescriptorPoolSize poolSize = {};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSize.descriptorCount = imageCount;
-    poolSizes[0] = poolSize;
+    poolSizes.push_back(poolSize);
 
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     poolSize.descriptorCount = imageCount * models.size();
-    poolSizes[1] = poolSize;
+    poolSizes.push_back(poolSize);
+
+    poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSize.descriptorCount = imageCount;
+    poolSizes.push_back(poolSize);
 
     VkDescriptorPoolCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    createInfo.poolSizeCount = 2;
-    createInfo.pPoolSizes = poolSizes;
+    createInfo.poolSizeCount = poolSizes.size();
+    createInfo.pPoolSizes = poolSizes.data();
     createInfo.maxSets = imageCount * (models.size() + 2);
 
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPool))

@@ -20,6 +20,9 @@ public:
 
     void resizeCallback(VkExtent2D extent2D);
 
+    void createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,
+                                uint32_t mipLevels, VkImageView *imageView);
+
 private:
     VulkanDevice *vulkanDevice;
 
@@ -36,8 +39,6 @@ private:
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& surfaceFormats);
     VkPresentModeKHR  chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& presentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities);
-
-    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 
     void resizeCleanup();
 };

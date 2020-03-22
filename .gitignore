@@ -24,5 +24,8 @@ vulkan-hello-world.cbp
 visual/models
 visual/textures
 
+#thirdparty
+thirdparty/stb
+
 #macOS
 .DS_Store

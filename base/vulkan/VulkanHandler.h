@@ -14,6 +14,7 @@
 #include "VulkanDefs.h"
 #include "VulkanBuffer.h"
 #include "../../VertexSet.h"
+#include "VulkanTexture.h"
 
 using namespace vtr;
 
@@ -46,8 +47,10 @@ public:
 
     void copyBuffer(VkBuffer &srcBuffer, VkBuffer &dstBuffer, VkDeviceSize size);
 
-    void createVertexSetsBuffer(VulkanBuffer &vBuffer, std::vector<VertexSet> &vertexSetsindexOffset,
+    void createVertexSetsBuffer(VulkanBuffer &vBuffer, std::vector<VertexSet> &vertexSets,
                                 VkDeviceSize *indexOffset);
+
+    void createTexture(VkDeviceSize imageSize, void *data, uint32_t width, uint32_t height, VulkanTexture *vTexture);
 
     VkCommandBuffer beginSingleTimeCommands();
 
@@ -81,6 +84,15 @@ private:
     void resizeCleanup();
 
     void updateFramebufferSize(VkExtent2D extent);
+
+    void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+                     VkMemoryPropertyFlags properties, VulkanTexture *vTexture);
+
+    void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+
+    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+
+    void createTextureSampler(VkSampler *sampler);
 };
 
 

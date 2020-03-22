@@ -8,6 +8,12 @@
 #include "VertexSet.h"
 #include "Model.h"
 #include "Camera.h"
+#include "base/vulkan/VulkanTexture.h"
+#include "base/texture/TextureHandler.h"
+#include "base/vulkan/VulkanShader.h"
+#include "Model.h"
+#include "model/Car.h"
+#include "model/Human.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -55,8 +61,9 @@ private:
     VkShaderModule fragShaderModule;
 
     std::vector<VertexSet> vertexSets;
-    VulkanBuffer vertexSetVbuffer;
+    VulkanBuffer vertexSetVBuffer;
     VulkanBuffer uboVBuffer;
+    VulkanTexture vTexture;
 
     VkDeviceSize dynamicAlignment;
     VkDeviceSize indexOffset;
@@ -70,8 +77,6 @@ private:
     std::vector<VkFence> inFlightFences;
     std::vector<VkFence> imagesInFlight;
 
-    VkDescriptorPool overlayDescriptorPool;
-
     void createGraphicsPipeline();
 
     void createCommandBuffers();
@@ -79,8 +84,6 @@ private:
     void loadModels();
 
     void createSyncPrimitives();
-
-    void createOverlay();
 
     void resizeApplication();
 

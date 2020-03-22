@@ -65,8 +65,8 @@ void VulkanSwapChain::createImageViews() {
     imageViews.resize(images.size());
 
     for (uint32_t i = 0; i < imageViews.size(); ++i) {
-        imageViews[i] = createImageView(images[i], format, VK_IMAGE_ASPECT_COLOR_BIT,
-                                        1);
+        createImageView(images[i], format, VK_IMAGE_ASPECT_COLOR_BIT,
+                        1, &imageViews[i]);
     }
 }
 
@@ -106,8 +106,8 @@ VkExtent2D VulkanSwapChain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &sur
 
 }
 
-VkImageView
-VulkanSwapChain::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
+void VulkanSwapChain::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags,
+                                      uint32_t mipLevels, VkImageView *imageView) {
     VkImageViewCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     createInfo.image = image;
@@ -119,10 +119,7 @@ VulkanSwapChain::createImageView(VkImage image, VkFormat format, VkImageAspectFl
     createInfo.subresourceRange.layerCount = 1;
     createInfo.format = format;
 
-    VkImageView imageView;
-    VK_CHECK_RESULT(vkCreateImageView(vulkanDevice->logicalDevice, &createInfo, nullptr, &imageView))
-
-    return imageView;
+    VK_CHECK_RESULT(vkCreateImageView(vulkanDevice->logicalDevice, &createInfo, nullptr, imageView))
 }
 
 void VulkanSwapChain::resizeCallback(VkExtent2D extent2D) {
