@@ -4,7 +4,7 @@
 
 stbi_uc *TextureHandler::loadTexture(std::string path, int *width, int *height, int *channels) {
     stbi_uc *pixels = stbi_load(path.c_str(), width, height, channels, STBI_rgb_alpha);
-
+    *channels = STBI_rgb_alpha;
     return pixels;
 }
 

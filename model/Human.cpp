@@ -9,10 +9,13 @@ void Human::update(size_t index) {
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-    auto positionMat = glm::translate(glm::mat4(scale), position);
-    positionMat[3][3] = 1;
+    auto scaleMat = glm::mat4(scale);
 
-    ubo.model = glm::rotate(positionMat, speed * time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    scaleMat[3][3] = 1;
+
+    auto rotationMat = glm::rotate(scaleMat, speed * time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+    ubo.model = glm::translate(scaleMat, position);
 
     vbInfos[index].updateData(&ubo.model, sizeof(ubo));
 }

@@ -107,7 +107,7 @@ void Application::createGraphicsPipeline() {
     rasterizationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizationStateCreateInfo.lineWidth = 1.0f;
-    rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;
@@ -231,22 +231,50 @@ void Application::createCommandBuffers() {
 }
 
 void Application::loadModels() {
-    VertexSet vertexSet = {};
-    vertexSet.vertices = {{{.5, .0, .0}, {.0,  .0,  1.0}, {1.0f, 0.0f}},
-                          {{.0, .0, .0}, {1.0, 1.0, 1.0}, {0.0f, 0.0f}},
-                          {{.0, .5, .0}, {1.0, .0,  .0},  {0.0f, 1.0f}},
-                          {{.5, .5, .0}, {.0,  1.0, .0},  {1.0f, 1.0f}}
-    };
-    vertexSet.indices = {{0, 1, 2, 0, 2, 3}};
-    vertexSets.push_back(vertexSet);
+    std::ifstream input("visual/data/input");
+    while (!input.eof()) {
+        std::string type;
+        input >> type;
+        if (type == "v") {
+            VertexSet vertexSet = {};
+            size_t num;
+            input >> num;
+            vertexSet.vertices.reserve(num);
+            float x, y, z, r, g, b, tx, ty;
+            for (size_t i = 0; i < num; i++) {
+                input >> x >> y >> z >> r >> g >> b >> tx >> ty;
+                vertexSet.vertices.push_back({{x,  y, z},
+                                              {r,  g, b},
+                                              {tx, ty}});
+            }
 
-    vertexSet.vertices = {
-            {{.0,  .0,  .0}, {.0,  .0,  1.0}, {1.0f, 0.0f}},
-            {{-.5, -.5, .0}, {1.0, .0,  .0},  {0.0f, -0.5f}},
-            {{-.5, .0,  .0}, {.0,  1.0, .0},  {0.0f, 1.0f}},
-    };
-    vertexSet.indices = {{0, 1, 2}};
-    vertexSets.push_back(vertexSet);
+            input >> num;
+            vertexSet.indices.reserve(num * 3);
+
+            for (size_t i = 0; i < num * 3; i++) {
+                input >> x;
+                vertexSet.indices.push_back(x);
+            }
+
+            vertexSets.push_back(vertexSet);
+        } else if (type == "mh") {
+            int vertIndex, texIndex;
+            float x, y, z, speed, scale;
+            input >> vertIndex >> texIndex;
+            auto human = new Human(&vertexSets[vertIndex], texIndex);
+
+            input >> x >> y >> z >> speed >> scale;
+            human->position = {x, y, z};
+            human->speed = speed;
+            human->scale = scale;
+            models.push_back(std::unique_ptr<Model>(human));
+        } else if(type == "c") {
+            float x, y, z;
+            input >> x >> y >> z;
+
+            camera.position = {x, y, z};
+        }
+    }
 
     vulkanHandler->createVertexSetsBuffer(vertexSetVBuffer, vertexSets, &indexOffset);
 
@@ -261,19 +289,6 @@ void Application::loadModels() {
         }
     }
 
-    models.emplace_back(new Human(&vertexSets[0], 2));
-
-    models.emplace_back(new Human(&vertexSets[1], 1));
-
-    models[0]->position = glm::vec3(1.f, 1.f, 1.f);
-    models[0]->speed = .2;
-    models[0]->scale = 1.4;
-
-    models[1]->position = glm::vec3(0.f, 0.f, 0.f);
-    models[1]->speed = .8;
-    models[1]->scale = 3.8;
-
-    camera.position = glm::vec3(2.0f, 2.0f, 2.0f);
 }
 
 void Application::draw() {
@@ -449,7 +464,7 @@ void Application::createUboBuffer() {
     size_t imageCount = vulkanHandler->swapChain.imageCount;
 
     VkDeviceSize bufferSize =
-            imageCount * modelDynamicAlignment * (models.size() + 2); //For camera ubo
+            imageCount * (modelDynamicAlignment * models.size() + cameraDynamicAlignment);
 
     vulkanHandler->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -628,7 +643,7 @@ void Application::loadTextures() {
     for (size_t i = 0; i < texturePaths.size(); i++) {
         int texWidth, texHeight, texChannels;
         auto *pixels = TextureHandler::loadTexture(texturePaths[i], &texWidth, &texHeight, &texChannels);
-        VkDeviceSize imageSize = texWidth * texHeight * 4;
+        VkDeviceSize imageSize = texWidth * texHeight * texChannels;
 
         if (!pixels) {
             throw std::runtime_error("failed to load texture image!");
@@ -685,10 +700,21 @@ void Application::cursorPosCallback(GLFWwindow *window, double xpos, double ypos
     cursor.xpos = xpos;
     cursor.ypos = ypos;
 
+    auto &pos = app->camera.position;
+
     if (app->cameraZRotation) {
-        app->camera.position.z += cursor.dy / app->windowExtent.height;
+        pos.z += cursor.dy / app->windowExtent.height;
     } else {
-        app->camera.position.x += cursor.dx / app->windowExtent.width;
-        app->camera.position.y += cursor.dy / app->windowExtent.height;;
+        pos.x += cursor.dx / app->windowExtent.width;
+        pos.y += cursor.dy / app->windowExtent.height;
+//
+//        auto rotationX = glm::rotate(glm::mat4(1.0f),
+//                                     static_cast<float>(cursor.dx) / app->windowExtent.width * glm::radians(90.f),
+//                                     glm::vec3(pos.x, pos.y, 0.0));
+//        auto rotationY = glm::rotate(glm::mat4(1.0f),
+//                                     static_cast<float>(cursor.dy) / app->windowExtent.height * glm::radians(90.f),
+//                                     glm::vec3(0.0, pos.y, pos.z));
+//
+//        app->camera.position = rotationY * rotationX * glm::vec4(pos, 1.0f);
     }
 }

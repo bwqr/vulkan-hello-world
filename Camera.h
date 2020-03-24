@@ -42,8 +42,6 @@ private:
     glm::vec3 center;
     glm::vec3 up;
     float fovy;
-
-
 };
 
 
