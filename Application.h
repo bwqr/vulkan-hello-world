@@ -6,12 +6,12 @@
 #include "base/window/glfw/GLFWWindowManager.h"
 #include "base/vulkan/VulkanBuffer.h"
 #include "VertexSet.h"
-#include "Model.h"
+#include "model/Model.h"
 #include "Camera.h"
-#include "base/vulkan/VulkanTexture.h"
+#include "base/vulkan/VulkanImage.h"
 #include "base/texture/TextureHandler.h"
 #include "base/vulkan/VulkanShader.h"
-#include "Model.h"
+#include "model/Model.h"
 #include "model/Car.h"
 #include "model/Human.h"
 
@@ -34,7 +34,7 @@ public:
 
     ~Application();
 
-    static void resizeCallback(GLFWwindow *window, int width, int height);
+    std::chrono::high_resolution_clock::time_point lastFrameTime;
 
     void mainLoop();
 
@@ -63,9 +63,10 @@ private:
     std::vector<VertexSet> vertexSets;
     VulkanBuffer vertexSetVBuffer;
     VulkanBuffer uboVBuffer;
-    VulkanTexture vTexture;
+    std::vector<VulkanImage> vTextures;
 
-    VkDeviceSize dynamicAlignment;
+    VkDeviceSize modelDynamicAlignment;
+    VkDeviceSize cameraDynamicAlignment;
     VkDeviceSize indexOffset;
 
     std::vector<VkCommandBuffer> commandBuffers;
@@ -76,6 +77,15 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     std::vector<VkFence> imagesInFlight;
+
+    struct {
+        double xpos;
+        double ypos;
+        double dx;
+        double dy;
+    } cursor;
+
+    bool cameraZRotation = false;
 
     void createGraphicsPipeline();
 
@@ -104,6 +114,14 @@ private:
     void createDescriptorSets();
 
     void createDescriptorPool();
+
+    void loadTextures();
+
+    static void resizeCallback(GLFWwindow *window, int width, int height);
+
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
+    static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 };
 
 

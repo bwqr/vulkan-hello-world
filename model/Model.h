@@ -2,8 +2,8 @@
 #define VULKAN_HELLO_WORLD_MODEL_H
 
 
-#include "VertexSet.h"
-#include "Camera.h"
+#include "../VertexSet.h"
+#include "../Camera.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -18,16 +18,24 @@ public:
     VertexSet *vertexSet;
     struct {
         glm::mat4 model;
+        glm::int32 texIndex;
     } ubo;
 
     std::vector<VirtualBufferInfo> vbInfos;
 
-    Model(VertexSet *vs);
+    Model(VertexSet *vs, glm::int32 texIndex);
 
     virtual void update(size_t index) = 0;
 
-    void updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize baseOffset, VkDeviceSize imageOffset, VkDeviceSize imageCount,
-                               VkDeviceSize dynamicAlignment);
+    void
+    updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize baseOffset, VkDeviceSize imageOffset, VkDeviceSize imageCount,
+                  VkDeviceSize dynamicAlignment);
+
+    glm::vec3 position = {0.0f, 0.0f, 0.0f};
+
+    float speed = 1;
+
+    float scale = 1;
 };
 
 

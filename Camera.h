@@ -25,6 +25,8 @@ public:
         glm::mat4 proj;
     } ubo;
 
+    glm::vec3 position;
+
     Camera() = default;
 
     void update(size_t index);

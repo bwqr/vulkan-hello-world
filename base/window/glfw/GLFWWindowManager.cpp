@@ -1,4 +1,5 @@
 #include "GLFWWindowManager.h"
+
 GLFWWindowManager::GLFWWindowManager(int width, int height) {
     this->width = width;
     this->height = height;
@@ -40,9 +41,27 @@ VkExtent2D GLFWWindowManager::getWindowExtent() {
 }
 
 VkResult GLFWWindowManager::createSurface(VkInstance instance, VkSurfaceKHR *surfaceKhr) {
-   return glfwCreateWindowSurface(instance, window, nullptr, surfaceKhr);
+    return glfwCreateWindowSurface(instance, window, nullptr, surfaceKhr);
 }
 
 void GLFWWindowManager::waitEvents() {
     glfwWaitEvents();
+}
+
+void GLFWWindowManager::setKeyCallback(void *application, void *callback) {
+    glfwSetWindowUserPointer(window, application);
+
+    glfwSetKeyCallback(window, (GLFWkeyfun) callback);
+}
+
+void GLFWWindowManager::setCursorPosCallback(void *application, void *callback) {
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    glfwSetWindowUserPointer(window, application);
+
+    glfwSetCursorPosCallback(window, (GLFWcursorposfun) callback);
+}
+
+void GLFWWindowManager::getCursorPos(double *xpos, double *ypos) {
+    glfwGetCursorPos(window, xpos, ypos);
 }

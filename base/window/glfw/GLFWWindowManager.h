@@ -31,6 +31,12 @@ public:
 
     void setResizeCallback(void *application, void *callback) override;
 
+    void setKeyCallback(void *application, void *callback) override;
+
+    void setCursorPosCallback(void *application, void *callback) override;
+
+    void getCursorPos(double *xpos, double *ypos) override;
+
     std::vector<const char *> getRequiredInstanceExtensions() override;
 
     VkExtent2D getWindowExtent() override;

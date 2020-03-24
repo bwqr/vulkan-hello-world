@@ -1,7 +1,8 @@
 #include "Model.h"
 
-Model::Model(VertexSet *vs) {
+Model::Model(VertexSet *vs, glm::int32 texIndex) {
     vertexSet = vs;
+    ubo.texIndex = texIndex;
 }
 
 void Model::updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize baseOffset, VkDeviceSize imageOffset,

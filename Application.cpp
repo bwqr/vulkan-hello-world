@@ -7,7 +7,12 @@ Application::Application() : windowManager(WIDTH, HEIGHT) {
     device = vulkanHandler->device.logicalDevice;
 
     windowManager.setResizeCallback(this, (void *) Application::resizeCallback);
+    windowManager.setKeyCallback(this, (void *) Application::keyCallback);
+    windowManager.getCursorPos(&cursor.xpos, &cursor.ypos);
+    windowManager.setCursorPosCallback(this, (void *) Application::cursorPosCallback);
 
+
+    loadTextures();
     loadModels();
     loadShaders();
     createUboBuffer();
@@ -33,6 +38,8 @@ void Application::mainLoop() {
         static auto startTime = std::chrono::high_resolution_clock::now();
 
         auto currentTime = std::chrono::high_resolution_clock::now();
+
+        lastFrameTime = currentTime;
 
         if (std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count() > 1) {
             std::cout << fps << std::endl;
@@ -109,7 +116,8 @@ void Application::createGraphicsPipeline() {
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = VK_TRUE;
     depthStencil.depthWriteEnable = VK_TRUE;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.back.compareOp = VK_COMPARE_OP_ALWAYS;
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
@@ -186,9 +194,12 @@ void Application::createCommandBuffers() {
         renderPassBeginInfo.renderArea.extent = vulkanHandler->windowExtent;
         renderPassBeginInfo.renderArea.offset = {0, 0};
 
-        VkClearValue clearValue = {0.0f, 0.0f, 0.0f};
-        renderPassBeginInfo.clearValueCount = 1;
-        renderPassBeginInfo.pClearValues = &clearValue;
+        std::array<VkClearValue, 2> clearValues = {};
+        clearValues[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+        clearValues[1].depthStencil = {1.0f, 0};
+
+        renderPassBeginInfo.clearValueCount = clearValues.size();
+        renderPassBeginInfo.pClearValues = clearValues.data();
 
         vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
@@ -202,7 +213,7 @@ void Application::createCommandBuffers() {
         uint32_t j = 0;
         for (auto &model: models) {
 
-            uint32_t dynamicOffset = j * static_cast<uint32_t>(dynamicAlignment);
+            uint32_t dynamicOffset = j * static_cast<uint32_t>(modelDynamicAlignment);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
                                     1, &descriptorSets[i], 1, &dynamicOffset);
@@ -250,25 +261,19 @@ void Application::loadModels() {
         }
     }
 
-    int texWidth, texHeight, texChannels;
-    auto *pixels = TextureHandler::loadTexture("visual/texture/texture.jpg", &texWidth, &texHeight, &texChannels);
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
+    models.emplace_back(new Human(&vertexSets[0], 2));
 
-    if (!pixels) {
-        throw std::runtime_error("failed to load texture image!");
-    }
+    models.emplace_back(new Human(&vertexSets[1], 1));
 
-    vulkanHandler->createTexture(imageSize, pixels, texWidth, texHeight, &vTexture);
+    models[0]->position = glm::vec3(1.f, 1.f, 1.f);
+    models[0]->speed = .2;
+    models[0]->scale = 1.4;
 
-    TextureHandler::unloadTexture(pixels);
+    models[1]->position = glm::vec3(0.f, 0.f, 0.f);
+    models[1]->speed = .8;
+    models[1]->scale = 3.8;
 
-    models.emplace_back(new
-                                Car(&vertexSets[0])
-    );
-    models.emplace_back(new
-                                Human(&vertexSets[1])
-    );
-
+    camera.position = glm::vec3(2.0f, 2.0f, 2.0f);
 }
 
 void Application::draw() {
@@ -287,13 +292,13 @@ void Application::draw() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
+    updateUniformBuffers(imageIndex);
+
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
         vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
     }
 
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
-
-    updateUniformBuffers(imageIndex);
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -374,10 +379,12 @@ void Application::cleanup() {
     vkDestroyBuffer(device, vertexSetVBuffer.buffer, nullptr);
     vkFreeMemory(device, vertexSetVBuffer.memory, nullptr);
 
-    vkDestroyImage(device, vTexture.image, nullptr);
-    vkFreeMemory(device, vTexture.memory, nullptr);
-    vkDestroyImageView(device, vTexture.imageView, nullptr);
-    vkDestroySampler(device, vTexture.sampler, nullptr);
+    for (const auto &vTexture: vTextures) {
+        vkDestroyImage(device, vTexture.image, nullptr);
+        vkFreeMemory(device, vTexture.memory, nullptr);
+        vkDestroyImageView(device, vTexture.imageView, nullptr);
+        vkDestroySampler(device, vTexture.sampler, nullptr);
+    }
 
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 }
@@ -436,29 +443,25 @@ void Application::updateUniformBuffers(uint32_t index) {
 }
 
 void Application::createUboBuffer() {
-    VkDeviceSize minBufferAlignment = vulkanHandler->device.properties.limits.minUniformBufferOffsetAlignment;
-    dynamicAlignment = sizeof(Model::ubo);
-
-    if (minBufferAlignment > 0) {
-        dynamicAlignment = (dynamicAlignment + minBufferAlignment - 1) & ~(minBufferAlignment - 1);
-    }
+    cameraDynamicAlignment = vulkanHandler->minAlignment(sizeof(Camera::ubo));
+    modelDynamicAlignment = vulkanHandler->minAlignment(sizeof(Model::ubo));
 
     size_t imageCount = vulkanHandler->swapChain.imageCount;
 
     VkDeviceSize bufferSize =
-            imageCount * dynamicAlignment * (models.size() + 2); //For camera ubo
+            imageCount * modelDynamicAlignment * (models.size() + 2); //For camera ubo
 
     vulkanHandler->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                 uboVBuffer);
 
-    camera.updateVBuffer(&uboVBuffer, 0, imageCount, dynamicAlignment);
-    VkDeviceSize offset = camera.vbInfos[0].size * imageCount;
+    camera.updateVBuffer(&uboVBuffer, 0, imageCount, cameraDynamicAlignment);
+    VkDeviceSize offset = cameraDynamicAlignment * imageCount;
 
     for (size_t i = 0; i < models.size(); i++) {
         //Base offset is the offset from camera buffer. And image offset is whole models buffer for one image.
-        models[i]->updateVBuffer(&uboVBuffer, offset + i * dynamicAlignment, models.size() * dynamicAlignment,
-                                 imageCount, dynamicAlignment);
+        models[i]->updateVBuffer(&uboVBuffer, offset + i * modelDynamicAlignment, models.size() * modelDynamicAlignment,
+                                 imageCount, modelDynamicAlignment);
     }
 }
 
@@ -487,16 +490,18 @@ void Application::createDescriptorSets() {
     modelBufferInfo.buffer = uboVBuffer.buffer;
     modelBufferInfo.range = sizeof(Model::ubo);
 
-    VkDescriptorImageInfo imageInfo = {};
-    imageInfo.sampler = vTexture.sampler;
-    imageInfo.imageView = vTexture.imageView;
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    std::vector<VkDescriptorImageInfo> imageInfos(vTextures.size());
+    for (size_t i = 0; i < imageInfos.size(); i++) {
+        imageInfos[i].sampler = vTextures[i].sampler;
+        imageInfos[i].imageView = vTextures[i].imageView;
+        imageInfos[i].imageLayout = vTextures[i].imageLayout;
+    }
 
     for (uint32_t i = 0; i < layouts.size(); i++) {
 
-        cameraBufferInfo.offset = i * sizeof(Camera::ubo);
+        cameraBufferInfo.offset = i * cameraDynamicAlignment;
 
-        modelBufferInfo.offset = dynamicAlignment * (2 * imageCount + models.size() * i);
+        modelBufferInfo.offset = modelDynamicAlignment * models.size() * i + cameraDynamicAlignment * imageCount;
 
         VkWriteDescriptorSet cameraWriteDescriptorSet = {};
         cameraWriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -522,8 +527,8 @@ void Application::createDescriptorSets() {
         imageWriteDescriptorSet.dstBinding = 2;
         imageWriteDescriptorSet.dstArrayElement = 0;
         imageWriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        imageWriteDescriptorSet.descriptorCount = 1;
-        imageWriteDescriptorSet.pImageInfo = &imageInfo;
+        imageWriteDescriptorSet.descriptorCount = imageInfos.size();
+        imageWriteDescriptorSet.pImageInfo = imageInfos.data();
 
         writeDescriptorSets[0] = cameraWriteDescriptorSet;
         writeDescriptorSets[1] = modelWriteDescriptorSet;
@@ -542,7 +547,6 @@ void Application::createDescriptorSetLayout() {
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
     layoutBindings.push_back(uboLayoutBinding);
 
     uboLayoutBinding.binding = 1;
@@ -551,16 +555,38 @@ void Application::createDescriptorSetLayout() {
 
     VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
     samplerLayoutBinding.binding = 2;
-    samplerLayoutBinding.descriptorCount = 1;
+    samplerLayoutBinding.descriptorCount = vTextures.size();
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     samplerLayoutBinding.pImmutableSamplers = nullptr;
     layoutBindings.push_back(samplerLayoutBinding);
 
+
+    /*
+        [POI]
+
+        The fragment shader will be using an unsized array, which has to be marked with a certain flag
+
+        FS:
+            layout (set = 0, binding = 1) uniform sampler2D textures[];
+    */
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT setLayoutBindingFlagsCreateInfoExt = {};
+    setLayoutBindingFlagsCreateInfoExt.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+    setLayoutBindingFlagsCreateInfoExt.bindingCount = layoutBindings.size();
+
+    std::vector<VkDescriptorBindingFlagsEXT> descriptorBindingFlags = {
+            0, // Binding 0
+            0, // Binding 1
+            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT // Binding 2 - for texture
+    };
+    setLayoutBindingFlagsCreateInfoExt.pBindingFlags = descriptorBindingFlags.data();
+
     VkDescriptorSetLayoutCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     createInfo.bindingCount = layoutBindings.size();
     createInfo.pBindings = layoutBindings.data();
+    createInfo.pNext = &setLayoutBindingFlagsCreateInfoExt;
 
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &createInfo, nullptr, &descriptorSetLayout))
 }
@@ -574,20 +600,44 @@ void Application::createDescriptorPool() {
     poolSizes.push_back(poolSize);
 
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    poolSize.descriptorCount = imageCount * models.size();
+    poolSize.descriptorCount = imageCount;
     poolSizes.push_back(poolSize);
 
     poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = imageCount;
+    poolSize.descriptorCount = imageCount * vTextures.size();
     poolSizes.push_back(poolSize);
 
     VkDescriptorPoolCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     createInfo.poolSizeCount = poolSizes.size();
     createInfo.pPoolSizes = poolSizes.data();
-    createInfo.maxSets = imageCount * (models.size() + 2);
+    createInfo.maxSets = imageCount;
 
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &createInfo, nullptr, &descriptorPool))
+}
+
+void Application::loadTextures() {
+    std::vector<std::string> texturePaths = {
+            "visual/textures/texture.jpg",
+            "visual/textures/tileable.jpg",
+            "visual/textures/stone-brick.jpg"
+    };
+
+    vTextures.resize(texturePaths.size());
+
+    for (size_t i = 0; i < texturePaths.size(); i++) {
+        int texWidth, texHeight, texChannels;
+        auto *pixels = TextureHandler::loadTexture(texturePaths[i], &texWidth, &texHeight, &texChannels);
+        VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+        if (!pixels) {
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        vulkanHandler->createTexture(imageSize, pixels, texWidth, texHeight, &vTextures[i]);
+
+        TextureHandler::unloadTexture(pixels);
+    }
 }
 
 void Application::resizeCallback(GLFWwindow *window, int width, int height) {
@@ -596,4 +646,49 @@ void Application::resizeCallback(GLFWwindow *window, int width, int height) {
     app->framebufferResized = true;
 
     std::cout << "Resized" << std::endl;
+}
+
+void Application::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    auto app = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+
+    auto diff = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - app->lastFrameTime).count();
+
+    if (key == GLFW_KEY_D && action == GLFW_PRESS) {
+        app->camera.position.x += .5;
+    } else if (key == GLFW_KEY_A && action == GLFW_PRESS) {
+        app->camera.position.x -= .5;
+    } else if (key == GLFW_KEY_E && action == GLFW_PRESS) {
+        app->camera.position.y += .5;
+    } else if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
+        app->camera.position.y -= .5;
+    } else if (key == GLFW_KEY_W && action == GLFW_PRESS) {
+        app->camera.position.z += .5;
+    } else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+        app->camera.position.z -= .5;
+    } else if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_PRESS) {
+        app->cameraZRotation = true;
+    } else if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_RELEASE) {
+        app->cameraZRotation = false;
+    }
+}
+
+void Application::cursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
+    auto app = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+
+    auto &cursor = app->cursor;
+
+    cursor.dx = xpos - cursor.xpos;
+    cursor.dy = ypos - cursor.ypos;
+
+    cursor.xpos = xpos;
+    cursor.ypos = ypos;
+
+    if (app->cameraZRotation) {
+        app->camera.position.z += cursor.dy / app->windowExtent.height;
+    } else {
+        app->camera.position.x += cursor.dx / app->windowExtent.width;
+        app->camera.position.y += cursor.dy / app->windowExtent.height;;
+    }
 }

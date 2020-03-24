@@ -13,6 +13,12 @@ public:
 
     virtual void setResizeCallback(void *application, void *callback) = 0;
 
+    virtual void setKeyCallback(void *application, void *callback) = 0;
+
+    virtual void setCursorPosCallback(void *application, void *callback) = 0;
+
+    virtual void getCursorPos(double *xpos, double *ypos) = 0;
+
     virtual void pollEvents() = 0;
 
     virtual bool shouldClose() = 0;

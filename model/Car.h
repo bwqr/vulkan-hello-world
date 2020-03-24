@@ -4,11 +4,11 @@
 #define VULKAN_HELLO_WORLD_CAR_H
 
 
-#include "../Model.h"
+#include "Model.h"
 
 class Car : public Model {
 public:
-    Car(VertexSet *vs);
+    Car(VertexSet *vs, glm::int32 texIndex);
 
     void update(size_t index) override;
 };

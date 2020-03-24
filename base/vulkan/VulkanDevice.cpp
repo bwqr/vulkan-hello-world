@@ -53,15 +53,36 @@ void VulkanDevice::createLogicalDevice() {
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.samplerAnisotropy = VK_TRUE;
 
+
+
+    /*Add descriptor indexing extension */
+    VkPhysicalDeviceDescriptorIndexingFeaturesEXT physicalDeviceDescriptorIndexingFeatures{};
+
+    physicalDeviceDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+    physicalDeviceDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    physicalDeviceDescriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
+    physicalDeviceDescriptorIndexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
+
+    VkPhysicalDeviceFeatures2 physicalDeviceFeatures2 = {};
+    physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    physicalDeviceFeatures2.features = deviceFeatures;
+    physicalDeviceFeatures2.pNext = &physicalDeviceDescriptorIndexingFeatures;
+
+    /*End add descriptor indexing extension*/
+
+
+
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.enabledExtensionCount = deviceExtensions.size();
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-    createInfo.pEnabledFeatures = &deviceFeatures;
+//    createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.pEnabledFeatures = nullptr;
     createInfo.enabledLayerCount = validationLayers.size();
     createInfo.ppEnabledLayerNames = validationLayers.data();
     createInfo.queueCreateInfoCount = queueCreateInfos.size();
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.pNext = &physicalDeviceFeatures2;
 
     VK_CHECK_RESULT(vkCreateDevice(physicalDevice, &createInfo, nullptr, &logicalDevice));
 
@@ -133,7 +154,6 @@ bool VulkanDevice::checkDeviceExtensionSupport(const VkPhysicalDevice &device) {
 
     return requiredExtensions.empty();
 }
-
 
 
 VulkanDevice::~VulkanDevice() {

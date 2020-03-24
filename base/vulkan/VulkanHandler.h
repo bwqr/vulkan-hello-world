@@ -14,7 +14,7 @@
 #include "VulkanDefs.h"
 #include "VulkanBuffer.h"
 #include "../../VertexSet.h"
-#include "VulkanTexture.h"
+#include "VulkanImage.h"
 
 using namespace vtr;
 
@@ -50,11 +50,13 @@ public:
     void createVertexSetsBuffer(VulkanBuffer &vBuffer, std::vector<VertexSet> &vertexSets,
                                 VkDeviceSize *indexOffset);
 
-    void createTexture(VkDeviceSize imageSize, void *data, uint32_t width, uint32_t height, VulkanTexture *vTexture);
+    void createTexture(VkDeviceSize imageSize, void *data, uint32_t width, uint32_t height, VulkanImage *vTexture);
 
     VkCommandBuffer beginSingleTimeCommands();
 
     void endSingleTimeCommands(VkCommandBuffer &commandBuffer);
+
+    VkDeviceSize minAlignment(VkDeviceSize size);
 
 private:
     WindowManager *windowManager;
@@ -62,6 +64,9 @@ private:
     VkDebugUtilsMessengerEXT debugMessenger;
 
     VkSurfaceKHR surface;
+
+    VulkanImage vDepthImage;
+    VkFormat depthFormat;
 
     void initVulkan();
 
@@ -72,6 +77,8 @@ private:
     std::vector<const char *> getRequiredExtensions();
 
     void createSurface();
+
+    void createDepthResources();
 
     void createRenderPass();
 
@@ -86,13 +93,17 @@ private:
     void updateFramebufferSize(VkExtent2D extent);
 
     void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-                     VkMemoryPropertyFlags properties, VulkanTexture *vTexture);
+                     VkMemoryPropertyFlags properties, VulkanImage *vImage);
 
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
     void createTextureSampler(VkSampler *sampler);
+
+    VkFormat findSupportedFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+
+    void findDepthFormat();
 };
 
 

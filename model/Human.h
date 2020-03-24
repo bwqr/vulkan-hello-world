@@ -4,11 +4,11 @@
 #define VULKAN_HELLO_WORLD_HUMAN_H
 
 
-#include "../Model.h"
+#include "Model.h"
 
 class Human : public Model {
 public:
-    Human(VertexSet *vs);
+    Human(VertexSet *vs, glm::int32 texIndex);
 
     void update(size_t index) override;
 };
