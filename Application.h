@@ -12,7 +12,6 @@
 #include "base/texture/TextureHandler.h"
 #include "base/vulkan/VulkanShader.h"
 #include "model/Model.h"
-#include "model/Car.h"
 #include "model/Human.h"
 
 #define GLM_FORCE_RADIANS
@@ -86,7 +85,10 @@ private:
     } cursor;
 
     bool cameraZRotation = false;
-
+    bool cameraXPlusMove = false;
+    bool cameraXNegMove = false;
+    bool cameraYPlusMove = false;
+    bool cameraYNegMove = false;
     void createGraphicsPipeline();
 
     void createCommandBuffers();
@@ -122,6 +124,8 @@ private:
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
     static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos);
+
+    void updateCamera(bool controller);
 };
 
 

@@ -25,7 +25,7 @@ public:
 
     Model(VertexSet *vs, glm::int32 texIndex);
 
-    virtual void update(size_t index) = 0;
+    virtual void updateUBO(size_t index) = 0;
 
     void
     updateVBuffer(VulkanBuffer *vBuffer, VkDeviceSize baseOffset, VkDeviceSize imageOffset, VkDeviceSize imageCount,
@@ -35,7 +35,7 @@ public:
 
     float speed = 1;
 
-    float scale = 1;
+    glm::vec3 scale = {1, 1, 1};
 };
 
 

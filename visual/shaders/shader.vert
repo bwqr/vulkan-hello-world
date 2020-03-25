@@ -2,8 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 layout(set = 0, binding = 0) uniform CameraBufferObject {
-    mat4 view;
-    mat4 proj;
+    mat4 viewProj;
 } camera;
 
 layout(set = 0, binding = 1) uniform ModelBufferObject {
@@ -21,7 +20,7 @@ layout(location = 2) flat out int outTexIndex;
 void main() {
 //    gl_Position = vec4(inPosition, 3.0);
 //    gl_Position = model.model * vec4(inPosition, 1.0);
-    gl_Position = camera.proj * camera.view * model.model * vec4(inPosition, 1.0);
+    gl_Position = camera.viewProj * model.model * vec4(inPosition, 1.0);
     outColor = inColor;
     outTexCoord = inTexCoord;
     outTexIndex = model.texIndex;

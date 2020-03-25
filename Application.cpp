@@ -259,20 +259,21 @@ void Application::loadModels() {
             vertexSets.push_back(vertexSet);
         } else if (type == "mh") {
             int vertIndex, texIndex;
-            float x, y, z, speed, scale;
+            float x, y, z, speed, sx, sy, sz;
             input >> vertIndex >> texIndex;
             auto human = new Human(&vertexSets[vertIndex], texIndex);
 
-            input >> x >> y >> z >> speed >> scale;
+            input >> x >> y >> z >> speed >> sx >> sy >> sz;
             human->position = {x, y, z};
             human->speed = speed;
-            human->scale = scale;
+            human->scale = {sx, sy, sz};
             models.push_back(std::unique_ptr<Model>(human));
-        } else if(type == "c") {
+        } else if (type == "c") {
             float x, y, z;
             input >> x >> y >> z;
 
-            camera.position = {x, y, z};
+            camera.eye = {x, y, z};
+            camera.viewPlaneDirection = {0, 10, 0};
         }
     }
 
@@ -450,9 +451,9 @@ void Application::loadShaders() {
 
 void Application::updateUniformBuffers(uint32_t index) {
     uboVBuffer.map(0, VK_WHOLE_SIZE);
-    camera.update(index);
+    camera.updateUBO(index);
     for (auto &model: models) {
-        model->update(index);
+        model->updateUBO(index);
     }
     uboVBuffer.unmap();
 }
@@ -633,6 +634,7 @@ void Application::createDescriptorPool() {
 
 void Application::loadTextures() {
     std::vector<std::string> texturePaths = {
+            "visual/textures/skybox-texture.jpg",
             "visual/textures/texture.jpg",
             "visual/textures/tileable.jpg",
             "visual/textures/stone-brick.jpg"
@@ -670,23 +672,25 @@ void Application::keyCallback(GLFWwindow *window, int key, int scancode, int act
 
     auto diff = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - app->lastFrameTime).count();
 
-    if (key == GLFW_KEY_D && action == GLFW_PRESS) {
-        app->camera.position.x += .5;
-    } else if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-        app->camera.position.x -= .5;
+    if (key == GLFW_KEY_D) {
+        app->cameraXPlusMove = action == GLFW_PRESS;
+    } else if (key == GLFW_KEY_A) {
+        app->cameraXNegMove = action == GLFW_PRESS;
     } else if (key == GLFW_KEY_E && action == GLFW_PRESS) {
-        app->camera.position.y += .5;
+        app->camera.eye.y += .5;
     } else if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
-        app->camera.position.y -= .5;
-    } else if (key == GLFW_KEY_W && action == GLFW_PRESS) {
-        app->camera.position.z += .5;
-    } else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
-        app->camera.position.z -= .5;
+        app->camera.eye.y -= .5;
+    } else if (key == GLFW_KEY_W) {
+        app->cameraYPlusMove = (action & (GLFW_PRESS | GLFW_REPEAT)) != 0;
+    } else if (key == GLFW_KEY_S) {
+        app->cameraYNegMove = action == GLFW_PRESS;
     } else if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_PRESS) {
         app->cameraZRotation = true;
     } else if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_RELEASE) {
         app->cameraZRotation = false;
     }
+
+    app->updateCamera(true);
 }
 
 void Application::cursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
@@ -700,21 +704,34 @@ void Application::cursorPosCallback(GLFWwindow *window, double xpos, double ypos
     cursor.xpos = xpos;
     cursor.ypos = ypos;
 
-    auto &pos = app->camera.position;
+    app->updateCamera(false);
+}
 
-    if (app->cameraZRotation) {
-        pos.z += cursor.dy / app->windowExtent.height;
+void Application::updateCamera(bool controller) {
+    if(controller) {
+
+        float tx = 0, ty = 0;
+        float k = 0.005;
+        if (cameraXPlusMove) {
+            tx = k;
+        } else if (cameraXNegMove) {
+            tx = -k;
+        }
+
+        if (cameraYPlusMove) {
+            ty = k;
+        } else if (cameraYNegMove) {
+            ty = -k;
+        }
+
+        camera.translateViewPlane(tx, ty);
     } else {
-        pos.x += cursor.dx / app->windowExtent.width;
-        pos.y += cursor.dy / app->windowExtent.height;
-//
-//        auto rotationX = glm::rotate(glm::mat4(1.0f),
-//                                     static_cast<float>(cursor.dx) / app->windowExtent.width * glm::radians(90.f),
-//                                     glm::vec3(pos.x, pos.y, 0.0));
-//        auto rotationY = glm::rotate(glm::mat4(1.0f),
-//                                     static_cast<float>(cursor.dy) / app->windowExtent.height * glm::radians(90.f),
-//                                     glm::vec3(0.0, pos.y, pos.z));
-//
-//        app->camera.position = rotationY * rotationX * glm::vec4(pos, 1.0f);
+        if (cameraZRotation) {
+            camera.eye.z += cursor.dy / windowExtent.height;
+        } else {
+            camera.rotateViewPlane(cursor.dx / windowExtent.width, cursor.dy / windowExtent.height);
+        }
     }
+
+
 }

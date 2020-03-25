@@ -10,7 +10,7 @@ class Human : public Model {
 public:
     Human(VertexSet *vs, glm::int32 texIndex);
 
-    void update(size_t index) override;
+    void updateUBO(size_t index) override;
 };
 
 
