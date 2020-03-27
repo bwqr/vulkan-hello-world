@@ -33,12 +33,13 @@ public:
 
     ~Application();
 
-    std::chrono::high_resolution_clock::time_point lastFrameTime;
+    double frameTimeDifference;
 
     void mainLoop();
 
 private:
     bool framebufferResized = false;
+    std::chrono::high_resolution_clock::time_point lastFrameTime;
 
     VkDevice device;
 

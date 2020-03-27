@@ -2,10 +2,7 @@
 #include "base/vulkan/VulkanHelper.h"
 
 void Camera::updateUBO(size_t index) {
-    glm::vec4 view4 = glm::mat4_cast(orientation) * glm::vec4(viewPlaneDirection, 1);
-    glm::vec4 up4 = glm::mat4_cast(orientation) * glm::vec4(up, 1);
-    glm::vec3 view3 = {view4.x, view4.y, view4.z};
-    view = glm::lookAt(eye, eye + view3, {up4.x, up4.y, up4.z});
+    view = glm::lookAt(eye, eye + oViewPlaneVector, orientedUpVector);
     proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
     proj[1][1] *= -1;
     ubo.viewProjection = proj * view;
@@ -32,31 +29,34 @@ void Camera::resizeCallback(VkExtent2D windowExtent) {
 }
 
 void Camera::rotateViewPlane(float dx, float dy) {
-//    auto axis = glm::normalize(-viewPlaneDirection);
-//
-//    axis = axis * sinf(glm::radians(dx * 90.f));
-//    auto scalar = cosf(glm::radians(dx * 90.f));
-//
-//    glm::fquat offset(scalar, axis.x, axis.y, axis.z);
-//    orientation = orientation * offset;
-    quaternionRotation({0, 0, 1}, glm::radians(-dx * 90.0f));
-    quaternionRotation({1, 0, 0}, glm::radians(-dy * 90.0f));
-//    viewPlaneDirection = glm::rotate(viewPlaneDirection, glm::radians(-dx * 90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-//    viewPlaneDirection = glm::rotate(viewPlaneDirection, glm::radians(-dy * 90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    static glm::fquat baseOrientation = {1.0f, 0.0f, 0.0f, 0.0f};
+
+    static float sensitivity = 45.0f;
+    static float div = 90.0f / sensitivity / 2.0f;
+    float fracpart, intpart;
+    fracpart = std::modf(yaw + dx, &intpart);
+    yaw = static_cast<int>(intpart) % static_cast<int>(360.0f / 2.0f) + fracpart;
+    pitch = std::max(std::min(pitch + dy, div), -div);
+
+    xOrientation = glm::mat3_cast(
+            quaternionRotation(baseOrientation, {0, 0, 1}, glm::radians(-yaw * sensitivity)));
+    zOrientation = glm::mat3_cast(
+            quaternionRotation(baseOrientation, {1, 0, 0}, glm::radians(-pitch * sensitivity)));
+
+    oViewPlaneVector = xOrientation * zOrientation * viewPlaneVector;
+
+    orientedUpVector = xOrientation * zOrientation * upVector;
 }
 
-void Camera::quaternionRotation(glm::vec3 axis, float rad) {
+void Camera::translateViewPlane(float dx, float dy) {
+    eye += xOrientation * glm::vec3(1, 0, 0) * dx + xOrientation * glm::vec3(0, 1, 0) * dy;
+}
+
+glm::fquat Camera::quaternionRotation(const glm::fquat &quat, glm::vec3 axis, float rad) {
     axis = axis * sinf(rad);
     float scalar = cosf(rad);
 
     glm::fquat offset(scalar, axis.x, axis.y, axis.z);
 
-    orientation = glm::normalize(orientation * offset);
-}
-
-void Camera::translateViewPlane(float dx, float dy) {
-    auto view4 = glm::mat4_cast(orientation) * glm::vec4(viewPlaneDirection, 1);
-    glm::vec3 view3 = {view4.x, view4.y, view4.z};
-
-    eye += view3 * dy;
+    return quat * offset;
 }

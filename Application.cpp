@@ -11,7 +11,6 @@ Application::Application() : windowManager(WIDTH, HEIGHT) {
     windowManager.getCursorPos(&cursor.xpos, &cursor.ypos);
     windowManager.setCursorPosCallback(this, (void *) Application::cursorPosCallback);
 
-
     loadTextures();
     loadModels();
     loadShaders();
@@ -39,17 +38,22 @@ void Application::mainLoop() {
 
         auto currentTime = std::chrono::high_resolution_clock::now();
 
-        lastFrameTime = currentTime;
-
         if (std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count() > 1) {
             std::cout << fps << std::endl;
             startTime = currentTime;
             fps = 0;
         }
 
+        updateCamera(true);
+
         fps++;
 
         draw();
+
+        frameTimeDifference = std::chrono::duration<float, std::chrono::seconds::period>(
+                currentTime - lastFrameTime).count();
+
+        lastFrameTime = currentTime;
     }
 }
 
@@ -273,7 +277,7 @@ void Application::loadModels() {
             input >> x >> y >> z;
 
             camera.eye = {x, y, z};
-            camera.viewPlaneDirection = {0, 10, 0};
+            camera.viewPlaneVector = {0, 20, 0};
         }
     }
 
@@ -668,14 +672,10 @@ void Application::resizeCallback(GLFWwindow *window, int width, int height) {
 void Application::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     auto app = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
 
-    auto currentTime = std::chrono::high_resolution_clock::now();
-
-    auto diff = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - app->lastFrameTime).count();
-
     if (key == GLFW_KEY_D) {
-        app->cameraXPlusMove = action == GLFW_PRESS;
+        app->cameraXPlusMove = (action & (GLFW_PRESS | GLFW_REPEAT)) != 0;
     } else if (key == GLFW_KEY_A) {
-        app->cameraXNegMove = action == GLFW_PRESS;
+        app->cameraXNegMove = (action & (GLFW_PRESS | GLFW_REPEAT)) != 0;
     } else if (key == GLFW_KEY_E && action == GLFW_PRESS) {
         app->camera.eye.y += .5;
     } else if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
@@ -683,14 +683,12 @@ void Application::keyCallback(GLFWwindow *window, int key, int scancode, int act
     } else if (key == GLFW_KEY_W) {
         app->cameraYPlusMove = (action & (GLFW_PRESS | GLFW_REPEAT)) != 0;
     } else if (key == GLFW_KEY_S) {
-        app->cameraYNegMove = action == GLFW_PRESS;
+        app->cameraYNegMove = (action & (GLFW_PRESS | GLFW_REPEAT)) != 0;
     } else if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_PRESS) {
         app->cameraZRotation = true;
     } else if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_RELEASE) {
         app->cameraZRotation = false;
     }
-
-    app->updateCamera(true);
 }
 
 void Application::cursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
@@ -708,10 +706,10 @@ void Application::cursorPosCallback(GLFWwindow *window, double xpos, double ypos
 }
 
 void Application::updateCamera(bool controller) {
-    if(controller) {
+    if (controller) {
 
         float tx = 0, ty = 0;
-        float k = 0.005;
+        float k = 2. * frameTimeDifference;
         if (cameraXPlusMove) {
             tx = k;
         } else if (cameraXNegMove) {
@@ -725,6 +723,7 @@ void Application::updateCamera(bool controller) {
         }
 
         camera.translateViewPlane(tx, ty);
+//        camera.rotateViewPlane(tx, -ty);
     } else {
         if (cameraZRotation) {
             camera.eye.z += cursor.dy / windowExtent.height;

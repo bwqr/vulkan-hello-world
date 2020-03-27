@@ -31,7 +31,8 @@ public:
 
     glm::vec3 eye;
 
-    glm::vec3 viewPlaneDirection;
+    glm::vec3 viewPlaneVector;
+    glm::vec3 oViewPlaneVector;
 
     Camera() = default;
 
@@ -49,11 +50,19 @@ public:
 private:
     float aspect;
 
-    glm::vec3 up = {0.0f, 0.0f, 1.0f};
+    glm::vec3 orientedViewPlaneVector;
+    glm::vec3 rightOrientedViewPlaneVector;
+    glm::vec3 orientedUpVector;
 
-    glm::fquat orientation = {1.0f, 0.0f, 0.0f, 0.0f};
+    float yaw = 0;
+    float pitch = 0;
 
-    void quaternionRotation(glm::vec3 axis, float rad);
+    glm::vec3 upVector = {0.0f, 0.0f, 1.0f};
+
+    glm::fquat xOrientation = {};
+    glm::fquat zOrientation = {};
+
+    static glm::fquat quaternionRotation(const glm::fquat &quat, glm::vec3 axis, float rad);
 };
 
 
